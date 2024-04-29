@@ -116,6 +116,33 @@ data %>%
 
 # customers who churned made more customer service calls
 
+# let's double check it with hypothesis testing
+# H0: the average number of customer service calls is the same for customers who churned and those who did not
+# H1: the average number of customer service calls is different for customers who churned and those who did not
+
+# chi square
+chisq.test(data$Customer.service.calls, data$Churn)
+# p-value < 0.05, we reject the null hypothesis therefore the average number of customer service calls is different for customers who churned and those who did not
+
+
+# now hypo for: Average Charges for Churners vs. Non-Churners
+# H0: the average charges are the same for customers who churned and those who did not
+# H1: the average charges are different for customers who churned and those who did not
+
+# t-test
+t.test(data$Total.day.charge ~ data$Churn)
+# p-value < 0.05, we reject the null hypothesis therefore the average charges are different for customers who churned and those who did not
+
+
+# hypo for Voice Mail Plan and Churn:
+# H0: the average churn rate is the same for customers who have a voice mail plan and those who do not
+# H1: the average churn rate is different for customers who have a voice mail plan and those who do not
+
+# chi square
+chisq.test(data$Voice.mail.plan, data$Churn)
+# p-value = 5.151e-09 < 0.05, we reject the null hypothesis therefore the average churn rate is different for customers who have a voice mail plan and those who do not
+
+
 # analysis of churn and day minutes and day charge
 
 # customers who churned have higher total day minutes
