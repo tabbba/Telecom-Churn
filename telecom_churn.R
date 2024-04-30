@@ -2,10 +2,13 @@ library(ggplot2)
 library(corrplot)
 library(dplyr)
 library(tidyr)
+library(skimr)
+library(stringr)
+library(glue)
 
-data = read.csv("TelecomChurn (1).csv")
+data = read.csv("TelecomChurn.csv")
 
-dim(data) # 3333 rows and 20 columns
+ # 3333 rows and 20 columns
 
 head(data)
 
@@ -14,6 +17,8 @@ str(data)
 sum(is.na(data)) # no missing values 
 
 summary(data)
+
+skim(data)
 
 # Count of Distinct Features
 for (col in names(data)) {
@@ -184,3 +189,78 @@ data %>%
 
 # we see that almost all customers that have an international plan churned
 
+
+cor_mat <-
+  data %>% 
+  select(where(is.numeric)) %>% 
+  cor()
+
+corrplot(
+  title = "\n\nCorrelation Matrix",
+  cor_mat,
+  method = "number",
+  order = "alphabet",
+  type = "lower",
+  diag = FALSE,
+  number.cex = 0.8,
+  tl.cex = 0.8,
+  bg="gray",
+  tl.col = "darkgreen"
+)
+
+
+
+group_plt <- function(var_1, var_2 = Churn){
+  
+  for_title_1 <- as_label(enquo(var_1))
+  for_title_1 <- str_to_title(str_replace_all(for_title_1, "_", " "))
+  
+  for_title_2 <- as_label(enquo(var_2))
+  for_title_2 <- str_to_title(str_replace_all(for_title_2, "_", " "))
+  
+  
+  data %>%
+    select({{var_1}}, {{var_2}}) %>% 
+    mutate(var_1_ex = {{var_1}},
+           var_2_ex = {{var_2}}) %>% 
+    count(var_1_ex, var_2_ex, name = "counts") %>% 
+    mutate(perc = (counts / sum(counts)) * 100) %>%
+    arrange(desc(counts)) %>%
+    ggplot(aes("", counts)) +
+    geom_col(
+      position = "fill",
+      color = "black",
+      width = 1,
+      aes(fill = factor(var_2_ex))
+    ) +
+    geom_text(
+      aes(label = str_c(round(perc,1), "%"), 
+          group = factor(var_1_ex)),
+      position = position_fill(vjust = 0.5),
+      color = "white",
+      size = 5,
+      show.legend = FALSE,
+      fontface = "bold"
+    ) +
+    coord_polar(theta = "y") +
+    scale_fill_manual (values = c("#193964", "#026AA3")) +
+    theme_void() +
+    facet_wrap(vars(str_c(var_1_ex, "\n", for_title_1)))+
+    labs(
+      title = glue(for_title_2, " proportion by ", for_title_1),
+      subtitle = " ",
+      fill =NULL
+    ) +
+    theme(plot.title = element_text(hjust = 0.5),
+          legend.position = "bottom",
+          strip.text = element_text(
+            colour = "black",
+            size = 12,
+            face = "bold"
+          ))
+  
+}
+
+group_plt(Voice.mail.plan)
+group_plt(International.plan)
+group_plt(State)
