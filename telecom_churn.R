@@ -229,6 +229,14 @@ corrplot(
 )
 
 
+# with this plot we see that there is a perfect correlation between the charge variables and minutes variables 
+# so we can drop all the minutes one 
+# we drop Total.day.minutes, Total.eve.minutes, Total.night.minutes, Total.intl.minutes
+
+data <- data %>%
+  select(-c(Total.day.minutes, Total.eve.minutes, Total.night.minutes, Total.intl.minutes))
+
+
 group_plt <- function(var_1, var_2 = Churn){
   
   for_title_1 <- as_label(enquo(var_1))
@@ -283,4 +291,42 @@ group_plt <- function(var_1, var_2 = Churn){
 group_plt(Voice.mail.plan)
 group_plt(International.plan)
 group_plt(State)
+
+
+#POINT 3
+# our task is to predict whether customers will churn or not. this task is useful for the company 
+# to take actions to prevent customers from churning.
+# moreover, it can helps the company to understand the reasons behind the churn and take actions to 
+# improve the service and customer satisfaction by offering also promotions to the customers that are more likely to churn.
+
+
+# CONCLUSION UP TO NOW:
+# we dropped the minutes variables because they are perfectly correlated with the charge variables
+# we saw that the churn rate is higher for customers that have an international plan
+# we saw that the churn rate is higher for customers that do not have a voice mail plan
+# we saw that the churn rate is higher for customers that have a higher number of customer service calls
+# we saw that the churn rate is higher for customers that have higher total day minutes and total day charge
+# we saw that the churn rate is higher for customers that have higher total eve charge, night charge, and intl charge
+
+
+
+
+# POINT 4
+# before proceeding with the full model we need to focus on some lower dimensional model in order to 
+# investigate some interesting relationships between the variables
+
+
+
+
+
+# POINT 5
+# data preprocessing
+
+# - split the data into training and testing sets
+# - scale the data
+
+
+
+
+
 
