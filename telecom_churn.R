@@ -3,6 +3,7 @@ library(corrplot)
 library(dplyr)
 library(tidyr)
 library(skimr)
+library(treemapify)
 library(stringr)
 library(glue)
 
@@ -44,13 +45,13 @@ churn_percent <- data %>%
   mutate(Percent = Count / sum(Count) * 100)
 
 ggplot(churn_percent, aes(x = "", y = Percent, fill = Churn)) +
-  geom_bar(stat = "identity", width = 1) +
+  geom_col(width = 1, color = 1) +
   coord_polar("y", start = 0) +
   theme_void() +
-  scale_fill_manual(values = c("False" = "violet", "True" = "skyblue"), labels = c("False" = "No", "True" = "Yes")) +
+  scale_fill_manual(values = c("False" = "#a5d8ff", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
   labs(title = "Percentage of Churn", fill = "Churn") +
   geom_text(aes(label = paste0(round(Percent, 1), "%")), position = position_stack(vjust = 0.5)) +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18))
 
 
 continuous_vars <- data[, sapply(data, is.numeric)]
@@ -59,23 +60,38 @@ categorical_vars <- data[, sapply(data, is.factor) & !names(data) %in% "Churn"]
 # univariate analysis for categorical variables (State, International.plan, Voice.mail.plan)
 
 long_data <- categorical_vars %>%
-  pivot_longer(cols = everything(), names_to = "Category", values_to = "Value")
+  pivot_longer(cols = c("International.plan", "Voice.mail.plan"), names_to = "Category", values_to = "Value")
 
-ggplot(long_data, aes(x = Value)) +
-  geom_bar(fill = "skyblue", color = "black") +
+ggplot(long_data, aes(x = Value, fill = Value)) +
+  geom_bar(color = "black") +
   facet_wrap(~ Category, scales = "free_x", nrow = 2, ncol = 2) +
   labs(title = "Distribution of Categorical Variables", x = NULL, y = "Count") +
   theme_minimal() +
   theme(
     strip.text = element_text(face = "bold", size = 12),
     axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
-    plot.title = element_text(hjust = 0.5, size = 16),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
     legend.position = "none"
-  )
+  ) 
 # voice mail and international plan are imbalanced
 
 # also our target variable is imbalanced
 
+# Treemap for state Distribution
+state.count <- data %>% group_by(State) %>% summarise(count = n())
+
+ggplot(state.count, aes(area = count, fill = count, label = glue("{State}\n{count}"))) +
+  geom_treemap() +
+  geom_treemap_text(colour = "white", place = "center", size = 13, grow = TRUE) +
+  labs(title = "Tree Map for State Distribution", fill = "State") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16, colour = "gray5"),
+    legend.position = "none",
+    plot.background = element_rect(fill = "#f6fff8")
+  ) +
+  scale_fill_viridis_c()
+ 
 # univariate analysis for numerical variables
 ### KDE plots
 continuous <- data[, sapply(data, is.numeric) | names(data) == "Churn"]
@@ -88,14 +104,17 @@ continuous %>%
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
   scale_color_discrete(name = "Churn Status", labels = c("No", "Yes")) +
-  labs(title = "Numeric Features Univariate Distribution by Churn Status") +
+  labs(title = "Numeric Features", subtitle = "Univariate Distribution by Churn Status") +
   theme_minimal() +
   theme(
-    plot.title = element_text(hjust = 0.5),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18, colour = "gray5"),
+    plot.subtitle = element_text(hjust = 0.5, colour = "gray5"),
     axis.text.x = element_text(angle = 45, hjust = 1),
     axis.title.x = element_text(face = "bold"),
     axis.title.y = element_text(face = "bold")
   )
+
+
 
 #There's a noticeable difference in the distribution of customer service calls 
 # between those who churned and those who did not. 
@@ -120,6 +139,7 @@ data %>%
   theme(plot.title = element_text(hjust = 0.5))
 
 # customers who churned made more customer service calls
+
 
 # let's double check it with hypothesis testing
 # H0: the average number of customer service calls is the same for customers who churned and those who did not
@@ -209,7 +229,6 @@ corrplot(
 )
 
 
-
 group_plt <- function(var_1, var_2 = Churn){
   
   for_title_1 <- as_label(enquo(var_1))
@@ -264,3 +283,4 @@ group_plt <- function(var_1, var_2 = Churn){
 group_plt(Voice.mail.plan)
 group_plt(International.plan)
 group_plt(State)
+
