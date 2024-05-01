@@ -48,7 +48,7 @@ ggplot(churn_percent, aes(x = "", y = Percent, fill = Churn)) +
   geom_col(width = 1, color = 1) +
   coord_polar("y", start = 0) +
   theme_void() +
-  scale_fill_manual(values = c("False" = "#a5d8ff", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
+  scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
   labs(title = "Percentage of Churn", fill = "Churn") +
   geom_text(aes(label = paste0(round(Percent, 1), "%")), position = position_stack(vjust = 0.5)) +
   theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18))
@@ -111,7 +111,8 @@ continuous %>%
     plot.subtitle = element_text(hjust = 0.5, colour = "gray5"),
     axis.text.x = element_text(angle = 45, hjust = 1),
     axis.title.x = element_text(face = "bold"),
-    axis.title.y = element_text(face = "bold")
+    axis.title.y = element_text(face = "bold"),
+    legend.position = "top"
   )
 
 
@@ -216,16 +217,21 @@ cor_mat <-
   cor()
 
 corrplot(
-  title = "\n\nCorrelation Matrix",
+  main = "\n\nCorrelation Matrix",
   cor_mat,
-  method = "number",
+  method = "color",
   order = "alphabet",
   type = "lower",
   diag = FALSE,
   number.cex = 0.8,
-  tl.cex = 0.8,
+  tl.cex = 0.6,
+  tl.srt = 45,
+  cl.pos = "b",
+  addgrid.col = "white",
+  addCoef.col = "white",
+  col = COL1("Purples"),
   bg="gray",
-  tl.col = "darkgreen"
+  tl.col = "grey50"
 )
 
 
@@ -287,10 +293,32 @@ group_plt <- function(var_1, var_2 = Churn){
           ))
   
 }
-
 group_plt(Voice.mail.plan)
 group_plt(International.plan)
 group_plt(State)
+
+ggplot(data, aes(x = State, fill = Churn)) + 
+  geom_bar(width = 0.7, color = 1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(hjust = 0, colour = "gray29", size = 10)) +
+  labs(title = "Churn by State", x = "State", y = "Count", fill = "Churn", subtitle = "Is Churn rate influenced by State?") +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  scale_y_continuous(limits = c(-35, 120)) +
+  scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
+  coord_polar(start = 0)
+
+# Investigate the relationship between state and churn with a chi-squared test of independence
+# H0: State and Churn are independent
+# H1: State and Churn are dependent
+contingency.table <- table(data$State, data$Churn)
+chisq.test(contingency.table)
+# p-value is significant, we reject the null hypothesis and conclude that state influences the churn rate
 
 
 #POINT 3
@@ -324,7 +352,6 @@ group_plt(State)
 
 # - split the data into training and testing sets
 # - scale the data
-
 
 
 
