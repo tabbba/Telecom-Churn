@@ -335,7 +335,7 @@ chisq.test(contingency.table)
 # we saw that the churn rate is higher for customers that have a higher number of customer service calls
 # we saw that the churn rate is higher for customers that have higher total day minutes and total day charge
 # we saw that the churn rate is higher for customers that have higher total eve charge, night charge, and intl charge
-
+# we saw that State also influences the churn rate
 
 
 
@@ -343,9 +343,42 @@ chisq.test(contingency.table)
 # before proceeding with the full model we need to focus on some lower dimensional model in order to 
 # investigate some interesting relationships between the variables
 
+# we should first deal with the 51 states, we can group them by region. let's do it
+# let's group them by north, south, east, west
+
+# print all the states
+unique(data$State)
+
+map_region <- function(state) {
+  northeast <- c("CT", "ME", "MA", "NH", "RI", "VT", "NJ", "NY", "PA")
+  midwest <- c("IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD")
+  south <- c("DE", "FL", "GA", "MD", "NC", "SC", "VA", "WV", "AL", "KY", "MS", "TN", "AR", "LA", "OK", "TX", "DC")
+  west <- c("AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA")
+  
+  if (state %in% northeast) {
+    return("Northeast")
+  } else if (state %in% midwest) {
+    return("Midwest")
+  } else if (state %in% south) {
+    return("South")
+  } else if (state %in% west) {
+    return("West")
+  } else {
+    return("Other")  # in case there are any states not covered
+  }
+}
+
+data$Region <- sapply(data$State, map_region)
+
+head(data)
+
+# let's see the distribution of churn by region
+group_plt(Region)
 
 
-
+# now let's re-do the chi square
+contingency.table <- table(data$Region, data$Churn)
+chisq.test(contingency.table)
 
 # POINT 5
 # data preprocessing
