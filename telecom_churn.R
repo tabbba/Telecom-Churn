@@ -9,7 +9,7 @@ library(glue)
 
 data = read.csv("TelecomChurn.csv")
 
- # 3333 rows and 20 columns
+# 3333 rows and 20 columns
 
 head(data)
 
@@ -68,7 +68,7 @@ ggplot(long_data, aes(x = Value, fill = Value)) +
   labs(title = "Distribution of Categorical Variables", x = NULL, y = "Count") +
   theme_minimal() +
   theme(
-    strip.text = element_text(face = "bold", size = 12),
+    strip.text = element_text(size = 12),
     axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
     plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
     legend.position = "none"
@@ -103,8 +103,8 @@ continuous %>%
   facet_wrap(vars(metric), scales = "free") +
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
-  scale_color_discrete(name = "Churn Status", labels = c("No", "Yes")) +
-  labs(title = "Numeric Features", subtitle = "Univariate Distribution by Churn Status") +
+  scale_color_manual(name = "Churn", labels = c("No", "Yes"), values = c("#15aabf", "#ff8787")) +
+  labs(title = "Numeric Features", subtitle = "Univariate Distribution by Churn") +
   theme_minimal() +
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold", size = 18, colour = "gray5"),
@@ -115,9 +115,7 @@ continuous %>%
     legend.position = "top"
   )
 
-
-
-#There's a noticeable difference in the distribution of customer service calls 
+°#There's a noticeable difference in the distribution of customer service calls 
 # between those who churned and those who did not. 
 # Customers who churned seem to make more customer service calls, which could 
 # indicate a relationship between customer satisfaction and churn.
@@ -200,7 +198,7 @@ data %>%
   group_by(International.plan, Churn) %>%
   summarise(Count = n(), .groups = "drop") %>%
   ggplot(aes(x = International.plan, y = Count, fill = Churn)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), color = 1) +
   geom_text(aes(label = Count),
             position = position_dodge(width = 0.9),
             vjust = -0.5, 
@@ -309,7 +307,7 @@ ggplot(data, aes(x = State, fill = Churn)) +
     plot.title = element_text(hjust = 0.5, face = "bold"),
     plot.subtitle = element_text(hjust = 0.5)
   ) +
-  scale_y_continuous(limits = c(-35, 120)) +
+  scale_y_continuous(limits = c(-35, 100)) +
   scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
   coord_polar(start = 0)
 
@@ -320,6 +318,9 @@ contingency.table <- table(data$State, data$Churn)
 chisq.test(contingency.table)
 # p-value is significant, we reject the null hypothesis and conclude that state influences the churn rate
 
+
+contingency.table <- table(data$Total.night.calls, data$Churn)
+chisq.test(contingency.table)
 
 #POINT 3
 # our task is to predict whether customers will churn or not. this task is useful for the company 
@@ -350,21 +351,22 @@ chisq.test(contingency.table)
 unique(data$State)
 
 map_region <- function(state) {
-  northeast <- c("CT", "ME", "MA", "NH", "RI", "VT", "NJ", "NY", "PA")
-  midwest <- c("IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD")
-  south <- c("DE", "FL", "GA", "MD", "NC", "SC", "VA", "WV", "AL", "KY", "MS", "TN", "AR", "LA", "OK", "TX", "DC")
-  west <- c("AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA")
+  west.regions <- c("WA", "OR", "ID", "MT", "WY", "CA", "NV", "UT", "CO", "AK", "HI")
+  southwest.regions <- c("AZ", "NM", "TX", "OK")
+  midwest.regions <- c("ND", "SD", "NE", "KS", "MN", "IA", "MO", "WI", "IL", "IN", "MI", "OH")
+  southeast.regions <- c("AR", "LA", "MS", "AL", "TN", "KY", "WV", "VA", "NC", "SC", "GA", "FL")
+  northeast.regions <- c("ME", "NH", "VT", "MA", "RI", "CT", "NY", "PA", "NJ", "DE", "MD", "DC")
   
-  if (state %in% northeast) {
-    return("Northeast")
-  } else if (state %in% midwest) {
-    return("Midwest")
-  } else if (state %in% south) {
-    return("South")
-  } else if (state %in% west) {
+  if (state %in% west.regions) {
     return("West")
+  } else if (state %in% midwest.regions) {
+    return("Mid West")
+  } else if (state %in% southeast.regions) {
+    return("South East")
+  } else if (state %in% northeast.regions) {
+    return("North East")
   } else {
-    return("Other")  # in case there are any states not covered
+    return("South West")  # in case there are any states not covered
   }
 }
 
@@ -380,10 +382,50 @@ group_plt(Region)
 contingency.table <- table(data$Region, data$Churn)
 chisq.test(contingency.table)
 
+# Outliers detection
+detect.outliers <- function(data, feature) {
+  Q1 <- quantile(data[[feature]], 0.25)
+  Q3 <- quantile(data[[feature]], 0.75)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  ggplot(data, aes(x = seq_along(data[[feature]]), y = data[[feature]])) +
+    geom_point(aes(color = (data[[feature]] < lower_bound | data[[feature]] > upper_bound)), size = 3) +
+    scale_color_manual(values = c("black", "red")) +
+    geom_hline(yintercept = lower_bound, linetype = "dashed", color = "red") +
+    geom_hline(yintercept = upper_bound, linetype = "dashed", color = "red") +
+    labs(title = "Scatter Plot with Outliers Highlighted", x = "Index", y = "Values") +
+    theme_minimal() +
+    theme(
+      legend.position = "none"
+    )
+}
+
+ggplot(data, aes(x = Region, fill = Churn)) + 
+  geom_bar(width = 0.7, color = 1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(hjust = 0, colour = "gray29", size = 10)) +
+  labs(title = "Churn by Region", x = "Region", y = "Count", fill = "Churn", subtitle = "Is Churn rate influenced by the Region?") +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) 
+
 # POINT 5
 # data preprocessing
 
+
 # - split the data into training and testing sets
+set.seed(1)
+
+ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = F)
+data.train <- data[ids.train,]
+data.val <- data[-ids.train,] 
 # - scale the data
 
 
