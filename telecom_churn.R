@@ -8,11 +8,18 @@ library(stringr)
 library(glue)
 library(dummy)
 library(caret)
+<<<<<<< HEAD
 library(car)
 library(pROC)
+=======
+library(glmnet)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+>>>>>>> 608991d97d28a69f057f4a15f17b10ee3b74cf68
 
 
-data = read.csv("TelecomChurn.csv")
+data = read.csv("Telecom_Churn.csv")
 
 # 3333 rows and 20 columns
 
@@ -388,7 +395,7 @@ newdata$Probability <- predict(model, newdata = newdata, type = "response")
 newdata$Odds <- newdata$Probability / (1 - newdata$Probability)
 head(newdata)
 
-# plot
+
 # plotting the probability of churn based on customer service calls
 ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
   geom_line() + 
@@ -411,7 +418,7 @@ minority_count <- sum(data$Churn == 'True')
 sampled_indices <- sample(majority_indices, size = minority_count, replace = FALSE)
 balanced_data <- data[c(sampled_indices, which(data$Churn == 'True')), ]
 
-levels(data$Churn) # original levels --> i needed this step since i was getting some errors due to the factorisation
+levels(data$Churn) # original levels --> i needed this step since i was getting some errors due to the factorization
 balanced_data$Churn <- as.factor(balanced_data$Churn)
 levels(balanced_data$Churn)
 
@@ -462,6 +469,7 @@ confusion.mat <- function(data, model, target, threshold) {
 
 confusion.mat(data, model, "Churn", 0.5) #Predictions on unbalanced data
 confusion.mat(balanced_data,balanced_model, "Churn", 0.5) # Predictions on balanced data
+
 
 # POINT 5 
 # PREPROCESSING AND FEATURE ENGINEERING 
@@ -527,9 +535,6 @@ ggplot(data, aes(x = Region, fill = Churn)) +
     plot.subtitle = element_text(hjust = 0.5)
   ) +
   scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) 
-
-
-
 
 # POINT 5
 # data preprocessing
@@ -601,3 +606,4 @@ bayesian.metrics
 # Slightly better results with akaike, maybe dropping all the region features as BIC does is too big of a loss of informations
 
 # ROC curves
+
