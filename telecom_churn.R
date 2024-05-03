@@ -6,6 +6,9 @@ library(skimr)
 library(treemapify)
 library(stringr)
 library(glue)
+library(dummy)
+library(caret)
+
 
 data = read.csv("TelecomChurn.csv")
 
@@ -115,7 +118,7 @@ continuous %>%
     legend.position = "top"
   )
 
-°#There's a noticeable difference in the distribution of customer service calls 
+#There's a noticeable difference in the distribution of customer service calls 
 # between those who churned and those who did not. 
 # Customers who churned seem to make more customer service calls, which could 
 # indicate a relationship between customer satisfaction and churn.
@@ -344,6 +347,13 @@ chisq.test(contingency.table)
 # before proceeding with the full model we need to focus on some lower dimensional model in order to 
 # investigate some interesting relationships between the variables
 
+# we'll proceed with customer service call and churn
+
+
+
+# POINT 5 
+# PREPROCESSING AND FEATURE ENGINEERING 
+
 # we should first deal with the 51 states, we can group them by region. let's do it
 # let's group them by north, south, east, west
 
@@ -402,6 +412,10 @@ detect.outliers <- function(data, feature) {
     )
 }
 
+#  e.g. (detect.outliers(data = data, feature = "Total.intl.charge"))
+
+
+# let's see the distribution of churn by region
 ggplot(data, aes(x = Region, fill = Churn)) + 
   geom_bar(width = 0.7, color = 1) +
   theme_minimal() +
@@ -416,9 +430,26 @@ ggplot(data, aes(x = Region, fill = Churn)) +
   ) +
   scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) 
 
+
+
+
 # POINT 5
 # data preprocessing
 
+# encoding the categorical variables. international plan, voice mail plan could be binary converted with 0 and 1
+
+data$International.plan <- as.integer(data$International.plan == "Yes")
+data$Voice.mail.plan <- as.integer(data$Voice.mail.plan == "Yes")
+data$Churn <- as.integer(data$Churn == "True")
+
+# with region having 5 levels we can use one hot encoding with dummy
+
+region_dummies <- model.matrix(~ Region - 1, data)
+data <- data %>%
+  select(-Region) %>%
+  cbind(region_dummies)
+
+head(data)
 
 # - split the data into training and testing sets
 set.seed(1)
@@ -426,7 +457,18 @@ set.seed(1)
 ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = F)
 data.train <- data[ids.train,]
 data.val <- data[-ids.train,] 
+
 # - scale the data
+predictors <- setdiff(names(data.train), "Churn")
+
+# Preprocess 
+preProcValues <- preProcess(data.train[, predictors], method = c("center", "scale"))
+
+# Transform both training and validation data using the pre-processing parameters calculated from the training set only
+data.train[, predictors] <- predict(preProcValues, data.train[, predictors])
+data.val[, predictors] <- predict(preProcValues, data.val[, predictors])
+
+
 
 
 
