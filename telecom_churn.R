@@ -452,25 +452,28 @@ data <- data %>%
 head(data)
 
 # - split the data into training and testing sets
-set.seed(1)
 
-ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = F)
+# Set seed for reproducibility
+set.seed(1)
+ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = FALSE)
 data.train <- data[ids.train,]
 data.val <- data[-ids.train,] 
 
-# - scale the data
-predictors <- setdiff(names(data.train), "Churn")
 
-# Preprocess 
-preProcValues <- preProcess(data.train[, predictors], method = c("center", "scale"))
+# SCALING
 
-# Transform both training and validation data using the pre-processing parameters calculated from the training set only
-data.train[, predictors] <- predict(preProcValues, data.train[, predictors])
-data.val[, predictors] <- predict(preProcValues, data.val[, predictors])
+cols_to_scale <- setdiff(names(data.train), c("Churn", "State"))
+data.train.scaled <- scale(data.train[, cols_to_scale])
 
+train.mean <- apply(data.train[, cols_to_scale], MARGIN = 2, FUN = mean)
+train.sd <- apply(data.train[, cols_to_scale], MARGIN = 2, FUN = sd)
 
+# Scale validation data using training data's parameters
+data.val.scaled <- scale(data.val[, cols_to_scale], center = train.mean, scale = train.sd)
 
+# Add back the target variable and state
+data.train.scaled <- data.frame(data.train.scaled, State = data.train$State, Churn = data.train$Churn)
+data.val.scaled <- data.frame(data.val.scaled, State = data.val$State, Churn = data.val$Churn)
 
-
-
+head(data.train.scaled)
 
