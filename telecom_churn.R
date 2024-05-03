@@ -8,6 +8,8 @@ library(stringr)
 library(glue)
 library(dummy)
 library(caret)
+library(car)
+library(pROC)
 
 
 data = read.csv("TelecomChurn.csv")
@@ -443,35 +445,23 @@ ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
 # plotting the confusion matrix for comparison
 # 0 --> False, 1 --> True
 # Prediction on the unbalanced data
-predicted_Y <- ifelse(predict(model, type = "response") > 0.5, 'True', 'False')
-actual_Y <- data$Churn
-True.positive <- sum(predicted_Y == 'True' & actual_Y == 'True')
-True.negative <- sum(predicted_Y == 'False' & actual_Y == 'False')
-False.positive <- sum(predicted_Y == 'True' & actual_Y == 'False')
-False.negative <- sum(predicted_Y == 'False' & actual_Y == 'True')
-Confusion.Matrix <- matrix(c(True.positive, False.negative, 
-                             False.positive, True.negative),
-                           nrow = 2, byrow = TRUE)
-rownames(Confusion.Matrix) <- c("Actual Positive", "Actual Negative")
-colnames(Confusion.Matrix) <- c("Predicted Positive", "Predicted Negative")
+confusion.mat <- function(data, model, target, threshold) {
+  predicted_Y <- ifelse(predict(model, type = "response", newdata = data) > threshold, 'True', 'False')
+  actual_Y <- data[[target]]
+  True.positive <- sum(predicted_Y == 'True' & actual_Y == 'True')
+  True.negative <- sum(predicted_Y == 'False' & actual_Y == 'False')
+  False.positive <- sum(predicted_Y == 'True' & actual_Y == 'False')
+  False.negative <- sum(predicted_Y == 'False' & actual_Y == 'True')
+  Confusion.Matrix <- matrix(c(True.positive, False.negative, 
+                               False.positive, True.negative),
+                             nrow = 2, byrow = TRUE)
+  rownames(Confusion.Matrix) <- c("Actual Positive", "Actual Negative")
+  colnames(Confusion.Matrix) <- c("Predicted Positive", "Predicted Negative")
+  print(Confusion.Matrix)
+}
 
-
-# Prediction on the balanced data
-predicted_Y_balanced <- ifelse(predict(balanced_model, type = "response") > 0.5, 'True', 'False')
-actual_Y_balanced <- balanced_data$Churn
-True.positive_balanced <- sum(predicted_Y_balanced == 'True' & actual_Y_balanced == 'True')
-True.negative_balanced <- sum(predicted_Y_balanced == 'False' & actual_Y_balanced == 'False')
-False.positive_balanced <- sum(predicted_Y_balanced == 'True' & actual_Y_balanced == 'False')
-False.negative_balanced <- sum(predicted_Y_balanced == 'False' & actual_Y_balanced == 'True')
-Confusion.Matrix_balanced <- matrix(c(True.positive_balanced, False.negative_balanced, 
-                                      False.positive_balanced, True.negative_balanced),
-                                    nrow = 2, byrow = TRUE)
-rownames(Confusion.Matrix_balanced) <- c("Actual Positive", "Actual Negative")
-colnames(Confusion.Matrix_balanced) <- c("Predicted Positive", "Predicted Negative")
-
-Confusion.Matrix
-Confusion.Matrix_balanced
-
+confusion.mat(data, model, "Churn", 0.5) #Predictions on unbalanced data
+confusion.mat(balanced_data,balanced_model, "Churn", 0.5) # Predictions on balanced data
 
 # POINT 5 
 # PREPROCESSING AND FEATURE ENGINEERING 
@@ -504,6 +494,11 @@ map_region <- function(state) {
 
 data$Region <- sapply(data$State, map_region)
 
+# we'll use the regions column for the first models to avoid having high-cardinality encoded columns.
+# we store the variable in order to use it later with more robust models (tree-based).
+state.column <- data$State
+data$State <- NULL
+
 head(data)
 
 # let's see the distribution of churn by region
@@ -516,28 +511,6 @@ chisq.test(contingency.table)
 # H0: Region and Churn are independent
 # H1: Region and Churn are dependent
 #p-value > 0.05, we fail to reject the null hypothesis, therefore the region does not influence the churn rate
-
-# Outliers detection
-detect.outliers <- function(data, feature) {
-  Q1 <- quantile(data[[feature]], 0.25)
-  Q3 <- quantile(data[[feature]], 0.75)
-  IQR <- Q3 - Q1
-  lower_bound <- Q1 - 1.5 * IQR
-  upper_bound <- Q3 + 1.5 * IQR
-  
-  ggplot(data, aes(x = seq_along(data[[feature]]), y = data[[feature]])) +
-    geom_point(aes(color = (data[[feature]] < lower_bound | data[[feature]] > upper_bound)), size = 3) +
-    scale_color_manual(values = c("black", "red")) +
-    geom_hline(yintercept = lower_bound, linetype = "dashed", color = "red") +
-    geom_hline(yintercept = upper_bound, linetype = "dashed", color = "red") +
-    labs(title = "Scatter Plot with Outliers Highlighted", x = "Index", y = "Values") +
-    theme_minimal() +
-    theme(
-      legend.position = "none"
-    )
-}
-
-#  e.g. (detect.outliers(data = data, feature = "Total.intl.charge"))
 
 
 # let's see the distribution of churn by region
@@ -561,45 +534,70 @@ ggplot(data, aes(x = Region, fill = Churn)) +
 # POINT 5
 # data preprocessing
 
-# encoding the categorical variables. international plan, voice mail plan could be binary converted with 0 and 1
-
-data$International.plan <- as.integer(data$International.plan == "Yes")
-data$Voice.mail.plan <- as.integer(data$Voice.mail.plan == "Yes")
-data$Churn <- as.integer(data$Churn == "True")
-
-# with region having 5 levels we can use one hot encoding with dummy
-
-region_dummies <- model.matrix(~ Region - 1, data)
-data <- data %>%
-  select(-Region) %>%
-  cbind(region_dummies)
-
-head(data)
-
 # - split the data into training and testing sets
-
 # Set seed for reproducibility
 set.seed(1)
 ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = FALSE)
 data.train <- data[ids.train,]
 data.val <- data[-ids.train,] 
 
-
 # SCALING
-
-cols_to_scale <- setdiff(names(data.train), c("Churn", "State"))
-data.train.scaled <- scale(data.train[, cols_to_scale])
+cols_to_scale <- c("Account.length", "Area.code", "Number.vmail.messages", "Total.day.calls", "Total.day.charge", "Total.eve.calls", "Total.eve.charge", "Total.night.calls", "Total.night.charge", "Total.intl.calls", "Total.intl.charge", "Customer.service.calls")
 
 train.mean <- apply(data.train[, cols_to_scale], MARGIN = 2, FUN = mean)
 train.sd <- apply(data.train[, cols_to_scale], MARGIN = 2, FUN = sd)
 
+data.train[, cols_to_scale] <- scale(data.train[, cols_to_scale], center = train.mean, scale = train.sd)
 # Scale validation data using training data's parameters
-data.val.scaled <- scale(data.val[, cols_to_scale], center = train.mean, scale = train.sd)
+data.val[, cols_to_scale] <- scale(data.val[, cols_to_scale], center = train.mean, scale = train.sd)
 
-# Add back the target variable and state
-data.train.scaled <- data.frame(data.train.scaled, State = data.train$State, Churn = data.train$Churn)
-data.val.scaled <- data.frame(data.val.scaled, State = data.val$State, Churn = data.val$Churn)
+# Baseline Logistic Regression Model
+logistic.baseline <- glm(Churn ~ ., data = data.train, family = "binomial")
+summary(logistic.baseline)
+par(mfrow = c(2,2))
+plot(logistic.baseline)
+vif(logistic.baseline) # all good
 
-head(data.train.scaled)
+# Stepwise Model Selection
+# Akaike Information Criterion
+akaike.fw <- step(glm(Churn ~ 1, family = "binomial", data = data.train), scope = formula(logistic.baseline), direction = "forward")
+akaike.back <- step(logistic.baseline, direction = "backward")
+akaike.both <- step(logistic.baseline, direction = "both")
 
-# Linear regression model 
+# Bayesian Information criterion
+bayesian.fw <- step(glm(Churn ~ 1, family = "binomial", data = data.train), scope = formula(logistic.baseline), direction = "forward", k = log(nrow(data.train)))
+bayesian.back <- step(logistic.baseline, direction = "backward", k = log(nrow(data.train)))
+bayesian.both <- step(logistic.baseline, direction = "both", k = log(nrow(data.train)))
+
+# Considering bidirectional elimination of both methods, BIC is more strict as it removes all the covariates representing the regions 
+
+get.metrics = function(conf.mat) {
+  true.positives <- conf.mat[1,1]
+  true.negatives <- conf.mat[2,2]
+  false.positives <- conf.mat[1,2]
+  false.negatives <- conf.mat[2,1]
+  num.observations <- true.positives + true.negatives + false.positives + false.negatives
+  
+  accuracy <- (true.positives + true.negatives) / num.observations
+  precision <- (true.positives) / (true.positives + false.positives)
+  recall <- true.positives / (true.positives + false.negatives)
+  f1 <- 2 * ((precision * recall) / (precision + recall))
+  
+  metrics <- data.frame(t(c(accuracy, precision, recall, f1)))
+  columns <- c("Accuracy", "Precision", "Recall", "F1")
+  colnames(metrics) <- columns
+  
+  return(metrics)
+}
+
+# Validation set results
+akaike.mat <- confusion.mat(data.val, akaike.both, "Churn", 0.5)
+akaike.metrics <- get.metrics(akaike.mat)
+akaike.metrics
+
+bayesian.mat <- confusion.mat(data.val, bayesian.both, "Churn", 0.5)
+bayesian.metrics <- get.metrics(bayesian.mat)
+bayesian.metrics
+# Slightly better results with akaike, maybe dropping all the region features as BIC does is too big of a loss of informations
+
+# ROC curves
