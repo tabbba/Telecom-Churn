@@ -1,0 +1,98 @@
+set.seed(1)
+data$Churn <- as.factor(data$Churn)
+model <- glm(Churn ~ Customer.service.calls, family = binomial, data = data)
+summary(model)
+
+call_range <- seq(min(data$Customer.service.calls, na.rm = TRUE), 
+                  max(data$Customer.service.calls, na.rm = TRUE), 
+                  length.out = 100)
+newdata <- data.frame(Customer.service.calls = call_range)
+newdata$Probability <- predict(model, newdata = newdata, type = "response")
+newdata$Odds <- newdata$Probability / (1 - newdata$Probability)
+head(newdata)
+
+# plot
+# plotting the probability of churn based on customer service calls
+ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
+  geom_line() + 
+  labs(title = "Effect of Customer Service Calls on the Probability of Churn",
+       x = "Number of Customer Service Calls",
+       y = "Probability of Churn") +
+  scale_y_continuous(labels = scales::percent_format()) +  # Convert y-axis into percentage format
+  theme_minimal() +  # Use a minimal theme
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.title.x = element_text(face = "bold"),  
+    axis.title.y = element_text(face = "bold")  
+  )
+
+# since we are dealing with an imbalanced dataset we undersample the majority class (no churn) to balance the dataset.
+set.seed(1)
+majority_indices <- which(data$Churn == 'False')
+minority_count <- sum(data$Churn == 'True')
+sampled_indices <- sample(majority_indices, size = minority_count, replace = FALSE)
+balanced_data <- data[c(sampled_indices, which(data$Churn == 'True')), ]
+
+levels(data$Churn) # original levels --> i needed this step since i was getting some errors due to the factorisation
+balanced_data$Churn <- as.factor(balanced_data$Churn)
+levels(balanced_data$Churn)
+
+table(balanced_data$Churn)
+
+balanced_model <- glm(Churn ~ Customer.service.calls, family = binomial, data = balanced_data )
+summary(balanced_model)
+
+# plot for balanced data
+call_range <- seq(min(data$Customer.service.calls, na.rm = TRUE), 
+                  max(data$Customer.service.calls, na.rm = TRUE), 
+                  length.out = 100)
+newdata <- data.frame(Customer.service.calls = call_range)
+newdata$Probability <- predict(balanced_model, newdata = newdata, type = "response")
+newdata$Odds <- newdata$Probability / (1 - newdata$Probability)
+
+ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
+  geom_line() + 
+  labs(title = "Effect of Customer Service Calls on the Probability of Churn (Balanced Data)",
+       x = "Number of Customer Service Calls",
+       y = "Probability of Churn") +
+  scale_y_continuous(labels = scales::percent_format()) +  # Convert y-axis into percentage format
+  theme_minimal() +  # Use a minimal theme
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.title.x = element_text(face = "bold"),  
+    axis.title.y = element_text(face = "bold")  
+  )
+
+# plotting the confusion matrix for comparison
+# 0 --> False, 1 --> True
+# Prediction on the unbalanced data
+predicted_Y <- ifelse(predict(model, type = "response") > 0.5, 'True', 'False')
+actual_Y <- data$Churn
+True.positive <- sum(predicted_Y == 'True' & actual_Y == 'True')
+True.negative <- sum(predicted_Y == 'False' & actual_Y == 'False')
+False.positive <- sum(predicted_Y == 'True' & actual_Y == 'False')
+False.negative <- sum(predicted_Y == 'False' & actual_Y == 'True')
+Confusion.Matrix <- matrix(c(True.positive, False.negative, 
+                             False.positive, True.negative),
+                           nrow = 2, byrow = TRUE)
+rownames(Confusion.Matrix) <- c("Actual Positive", "Actual Negative")
+colnames(Confusion.Matrix) <- c("Predicted Positive", "Predicted Negative")
+
+
+# Prediction on the balanced data
+predicted_Y_balanced <- ifelse(predict(balanced_model, type = "response") > 0.5, 'True', 'False')
+actual_Y_balanced <- balanced_data$Churn
+True.positive_balanced <- sum(predicted_Y_balanced == 'True' & actual_Y_balanced == 'True')
+True.negative_balanced <- sum(predicted_Y_balanced == 'False' & actual_Y_balanced == 'False')
+False.positive_balanced <- sum(predicted_Y_balanced == 'True' & actual_Y_balanced == 'False')
+False.negative_balanced <- sum(predicted_Y_balanced == 'False' & actual_Y_balanced == 'True')
+Confusion.Matrix_balanced <- matrix(c(True.positive_balanced, False.negative_balanced, 
+                                      False.positive_balanced, True.negative_balanced),
+                                    nrow = 2, byrow = TRUE)
+rownames(Confusion.Matrix_balanced) <- c("Actual Positive", "Actual Negative")
+colnames(Confusion.Matrix_balanced) <- c("Predicted Positive", "Predicted Negative")
+
+Confusion.Matrix
+Confusion.Matrix_balanced

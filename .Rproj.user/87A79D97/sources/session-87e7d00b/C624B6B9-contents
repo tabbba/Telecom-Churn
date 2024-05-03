@@ -1,0 +1,1184 @@
+---
+title: "Data Analysis for Business - Midterm Project"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Standard Deviated Group {#main .tabset}
+
+Group members:
+
+-   Edoardo Cocciò - 282401
+-   Alexandra Tabarani - 282091
+-   Simone Filosofi - 284531
+-   Marta Torella - 284091
+
+## EDA
+
+The banking industry operates in a highly competitive environment, where customer retention is crucial for sustained business success. In this context, our project aims to delve into a dataset containing detailed information about bank customers to predict the likelihood of an account closure.
+
+To begin our exploratory data analysis (EDA), we imported the necessary libraries and we loaded the dataset titled `bank_accounts_train.csv` into the R environment.
+
+```{r include=FALSE}
+library(ggplot2)
+library(corrplot)
+library(patchwork)
+library(scales)
+library(forcats)
+library(RColorBrewer)
+library(dplyr)
+library(gridExtra)
+library(GGally)
+library(tidyr)
+library(car)
+library(caret)
+library(class)
+library(naniar)
+library(pROC)
+```
+
+```{r}
+data <- read.csv("bank_accounts_train.csv", header = T, stringsAsFactors = T)
+data.test <- read.csv("bank_accounts_test.csv", header =T, stringsAsFactors = T)
+```
+
+We first check the structure of the data to get an overall feeling of the respective types and values.
+
+```{r}
+str(data)
+```
+
+We see that there are 7597 rows and we have 21 features in our data. These features include customer demographic information, account characteristics, and transaction history. Notably, we have factors such as Gender, Education Level, Marital Status, and Card Category, as well as a range of numerical features like Customer Age, Total Relationship Count, Credit Limit, and various transaction-related variables.
+
+```{r}
+summary(data)
+```
+
+Using the `summary()` function, we obtained a snapshot of the central tendency and dispersion of the numerical features and the distribution of the categorical variables:
+
+-   **Client Number (`CLIENTNUM`)**: Appears to be a unique identifier for each customer with a wide range.
+-   **Customer Age**: Age ranges from 26 to 73, with a median of 46, indicating a middle-aged customer base.
+-   **Gender**: More female (F:4037) customers than male (M:3560), though not by a wide margin.
+-   **Dependent Count**: Ranges from 0 to 5, with most customers having up to 3 dependents.
+-   **Education Level**: A diverse educational background is evident, with a notable number of customers with unknown education levels (1127).
+-   **Marital Status**: Majority are married (3540), followed by single (297) and divorced (555), with some unknowns (565).
+-   **Card Category**: Overwhelmingly, customers have a Blue card (7080), with far fewer Silver (413), Gold (88), or Platinum (16) cards.
+-   **Months on Book**: Customers have been with the bank for a period ranging from 13 to 56 months.
+-   **Total Relationship Count**: Customers have between 1 to 6 products with the bank.
+-   **Months Inactive 12 mon**: A variable indicating customer engagement, varying between 0 to 6 months.
+-   **Contacts Count 12 mon**: Reflects customer interaction with the bank, ranging from 0 to 6 in the last year.
+-   **Credit Limit**: Shows a wide range from 1439 to 34516, highlighting the variety in customers' credit situations.
+-   **Total Revolving Bal**: Ranges from 0 to 2517, suggesting varying usage of available credit.
+-   **Avg Open To Buy**: Considerable variation is observed, suggesting differences in the unused credit line.
+-   **Total Amt Chng Q4 Q1**: Indicates the change in transaction amount over time.
+-   **Total Trans Amt** and **Total Trans Ct**: High variation in both total transaction amount and count, essential for understanding customer activity.
+-   **Total Ct Chng Q4 Q1**: Some customers show significant changes in their transaction count over time.
+-   **Avg Utilization Ratio**: Spans from 0 to 0.994, which will be significant in understanding how customers are utilizing their credit.
+-   **Income**: Ranges widely from 0.01425 to 199.94190 (in thousands of dollars), indicating a diverse economic background among customers.
+-   **Closed Account**: A binary variable where most accounts are open (0), with a proportion closed (1).
+
+The summary statistics provide a comprehensive overview of the dataset, offering insights into the distribution of variables and the characteristics of bank customers.
+
+Upon examining the structure of our dataset, we observed that `CLIENTNUM` serves solely as an identifier and can thus be safely removed from further analysis. Additionally, we converted the 'Closed_Account' variable to a factor to facilitate subsequent modeling and visualization.
+
+```{r}
+data <- within(data, rm("CLIENTNUM"))
+data$Closed_Account <- as.factor(data$Closed_Account)
+```
+
+A significant number of categorical variables are marked as "Unknown", which we will need to decide how to handle—whether to treat as missing and impute or remove.
+
+```{r}
+sapply(data, function(x) any(x %in% "Unknown"))
+```
+
+We see that the columns `Education_Level` and `Marital_Status` both contain unknown values, which we will replace using the appropriate datatype `NA`. This conversion allows us to treat these entries appropriately during analysis, ensuring that our statistical summaries and models handle them as missing rather than as a category of their own.
+
+**Handling NA Values**
+
+```{r fig.dim=c(5,3), fig.align="center" }
+data$Education_Level[data$Education_Level == "Unknown"] <- NA
+data$Marital_Status[data$Marital_Status == "Unknown"] <- NA
+
+sum(is.na(data))
+naniar::gg_miss_upset(data)
+```
+
+Thanks to this handy visualization we can see that `Marital Status` contains 1048 missing values and `Education_Level` 486. In 79 rows both of those columns will contain missing values.
+Moreover, we can see that our dataset contains 1613 missing values in total. The problem is that those two values, as previously inspected, are both part of categorical variables and we decided to avoid imputing them using the most frequent value as we risk to introduce bias in our model. An alternative approach that we tried without success was to build a model to predict the missing values, but the results were not satisfactory. Therefore, we decided to **remove the missing rows** from our dataset.
+
+```{r}
+data <- na.omit(data)
+sum(apply(data, 1, anyNA))
+```
+
+We'll continue by checking if there are any duplicates in this dataset and eventually remove them to ensure data integrity and accuracy of our analysis.
+
+```{r}
+all_duplicates <- duplicated(data) | duplicated(data, fromLast = TRUE)
+data[all_duplicates, ]
+```
+
+Upon inspection, we found that the two latter rows (7596 and 7597) are duplicates of the first and the second lines, respectively. Therefore, we'll proceed by eliminating them from the dataset:
+
+```{r}
+data <- data[-c(7596, 7597), ]
+```
+
+We can now initiate our analysis by dividing the dataset into continuous and categorical variables. This segmentation facilitates a focused examination of the distinct characteristics inherent in our data. Following this initial step, we delve into a comprehensive evaluation of the dataset's unique features. The subsequent code will facilitate the calculation of the count of distinct values for each feature, providing valuable insights into the breadth and diversity of our dataset.
+
+```{r}
+continuous_vars <- data[, sapply(data, is.numeric)]
+categorical_vars <- data[, !names(data) %in% names(continuous_vars)]
+```
+
+This step ensures that our dataset contains only unique observations, which is essential for maintaining the reliability of our analytical processes.
+
+Let's now start analyzing and visualizing patterns and relationships among our variables. Understanding these dynamics can offer us insights into the behavior of account holders and the factors influencing their decisions to continue or discontinue their services.
+
+As a starting point, we will examine the proportion of accounts that have been closed within our dataset. In this context, an account marked with a '0' signifies that it remains open and active, whereas a '1' indicates an account that has been closed.
+
+```{r echo=FALSE, fig.align="center"}
+pieplot.data <- data %>%
+  group_by(Closed_Account) %>%
+  count() %>% 
+  ungroup() %>%
+  mutate(perc = `n` / sum(`n`)) %>%
+  arrange(perc) %>%
+  mutate(labels = scales::percent(perc))
+  
+  
+ggplot(pieplot.data, aes(x = "", y = perc, fill = Closed_Account)) +
+  geom_col(width = 1, color = 1) +
+  coord_polar(theta = "y") +
+  labs(fill = "Closed Account", title = "Distribution of the Target Variable") +
+  geom_text(aes(label = labels),
+             position = position_stack(vjust = 0.5),
+             show.legend = FALSE) +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  guides(fill = guide_legend(title = "Closed Account")) +
+  scale_fill_manual(values = c("0" = "#FFE4C9", "1" = "#FA7070"), 
+                    labels = c("0" = "No", "1" = "Yes"))
+```
+
+The barplot illustrates the distribution of closed versus active accounts, revealing an unbalanced proportion where a significant majority, 83.98%, of accounts remain open (denoted as '0'), while a smaller fraction, 16.02%, are marked as closed (denoted as '1'). This imbalance in the dataset underscores a lower churn rate and effectively emphasizes the disparity in account status, with most customers maintaining active accounts.
+
+### Univariate Analysis
+
+Now is the time to conduct some univariate analysis between our variables and our target variable `closed_account` to assess their individual distributions and explore any potential patterns or trends that may exist, a crucial step in our analysis to improve customer retention strategies.
+
+```{r echo=FALSE, fig.align="center"}
+
+data %>%
+  select(all_of(names(categorical_vars)), Closed_Account) %>%
+  group_by_at(c(names(categorical_vars), "Closed_Account")) %>%
+  summarize(n = n()) %>%
+  pivot_longer(cols = -c(Closed_Account, n),
+               names_to = "metric",
+               values_to = "levels") %>%
+  ggplot(aes(levels, n, fill = Closed_Account)) +
+  geom_col() +
+  facet_wrap(vars(metric),
+             scales = "free") +
+  scale_fill_discrete(labels = c("No", "Yes")) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(fill = "Closed Account", title = "Nominal Features Univariate Distribution")+
+  theme_minimal() +
+  scale_fill_manual(values = c("0" = "#FFE4C9", "1" = "#FA7070"), 
+                    labels = c("0" = "No", "1" = "Yes")) +
+  theme(
+    plot.title = element_text(hjust = 0.5),  
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.title.x = element_text(face = "bold"), 
+    axis.title.y = element_text(face = "bold"),  
+  )
+```
+
+We start by analyzing the distribution of categorical variables in relation to the target variable 'Closed_Account'. The bar plots provide insights into the distribution of each category within the features, highlighting the proportion of closed and active accounts. This first univariate analysis conducted with sets of barplots shows that most accounts are associated with the 'Blue' card category and the 'Graduate' education level. The distribution of closed accounts is fairly uniform across different levels of card categories, education, gender, and marital status, with no immediately apparent trend indicating a strong association between these categorical features and the likelihood of account closure. We now proceed with the univariate analysis of continuous variables, where we'll use instead density plots to visualize the distribution of numerical features in relation to the target variable 'Closed_Account'.
+
+```{r fig.align='center', fig.dim=c(15,13), echo = FALSE}
+data %>%
+  select(all_of(names(continuous_vars)), Closed_Account) %>%
+  pivot_longer(cols = -Closed_Account,
+               names_to = "metric",
+               values_to = "values") %>%
+  ggplot(aes(x = values, fill = Closed_Account)) +
+  geom_density(alpha = 0.2) +
+  facet_wrap(vars(metric),
+             scales = "free") +
+  labs(title = "Continuous Features Univariate Distribution KDE", fill = "Closed Account") +
+  theme_minimal() +
+  scale_fill_manual(values = c("0" = "#FFE4C9", "1" = "#FA7070"), 
+                    labels = c("0" = "No", "1" = "Yes")) +
+  theme(
+    plot.title = element_text(hjust = 0.5),  
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.title.x = element_text(face = "bold"), 
+    axis.title.y = element_text(face = "bold"),  
+  )
+```
+
+The density plots show that the distributions of continuous variables for accounts that were closed and those that were not closed often overlap, suggesting no stark contrast between the two groups. However, lower values in `Credit_Limit`, `Total_Revolving_Bal`, `Total_Trans_Amt`, and `Total_Trans_Ct` are more common among closed accounts, which could imply that accounts with lower credit activity and balances are more likely to be closed. 
+We can see that among those distributions there's a tendency to be **skewed to the right**, which could indicate that most of the data is concentrated on the lower values of the variables. We can also notice a well defined normal distribution in the `Customer_Age` variable. 
+
+### Bivariate analysis
+
+We will now proceed with a bivariate analysis to explore the relationships between pairs of variables and their impact on account closure. We selected the features we believe could be most relevant to predicting account closure and will examine their interactions to identify potential patterns and correlations.
+
+```{r fig.align="center", echo = FALSE, warning=FALSE}
+select(data, Card_Category, Avg_Utilization_Ratio, Total_Trans_Amt) %>%
+  ggplot(aes(x = Card_Category, y = Total_Trans_Amt, fill = Card_Category)) + 
+  geom_jitter(aes(color = Card_Category), alpha = 0.5, size = 0.5, show.legend = FALSE) + 
+  geom_violin(aes(fill = Card_Category), alpha = 0.45, show.legend = FALSE, trim = FALSE) +
+  labs(title = "Distributions of Transactions by type of card", x = "Card Category", y = "Total Transaction Amount") +
+  theme_bw()
+```
+
+The first bivariate analysis examines the relationship between `Card_Category`, `Avg_Utilization_Ratio`, and `Total_Trans_Amt`; the plot aim is to provide a visual summary of how transaction amounts are distributed across different card categories, showing differences in variability and transaction behavior among cardholders of different categories. The Violin Plot shows the distribution of the `Total_Trans_Amt` for each `Card_Category` and its width at different amounts indicates the density of data points there; the Jitter Plot instead shows individual data points. The plot reveals that 'Platinum' and 'Silver' cardholders have a wider range of transaction amounts, indicating greater variability in their spending. 'Blue' cardholders tend to have smaller transactions more frequently. The 'Gold' category has fewer large transactions compared to 'Platinum'.
+
+```{r, fig.align="center", echo = FALSE}
+blue_palette <- brewer.pal(n = 4, name = "Blues")[1:4]  
+
+ggplot(data, aes(x=Card_Category, y=Credit_Limit, fill=Card_Category)) +
+  geom_boxplot(outlier.shape = 1, color = "black") +  
+  labs(title = "Credit Limit by Card Category",
+       x = "Card Category",
+       y = "Credit Limit") +
+  theme_classic() +
+  scale_fill_manual(values=blue_palette) +  
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20),  
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),  
+    axis.text.y = element_text(size = 12),  
+    legend.position = "right",  
+    legend.title = element_blank(),  
+    panel.grid.major.x = element_blank(),  
+    panel.grid.minor.x = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=1)  
+  )
+```
+
+The second bivariate analysis explores the relationship between `Card_Category` and `Credit_Limit` to understand how credit limits are distributed across different card categories. The boxplot provides a visual summary of the distribution of credit limits for each card category, highlighting the median, quartiles, and potential outliers. The box plot shows that 'Platinum' and 'Silver' cards have higher median credit limits than 'Blue' and 'Gold', with 'Gold' and 'Platinum' showing a greater range in limits. 'Blue' cards have a few extreme outliers with very high credit limits.
+
+```{r echo = F, fig.align="center"}
+data$Education_Level <- fct_infreq(data$Education_Level)
+
+ggplot(data, aes(x = Education_Level, fill = Closed_Account)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = percent_format()) +
+  coord_flip() + 
+  scale_fill_manual(values = c("0" = "#FFE4C9", "1" = "#FA7070"), 
+                    labels = c("0" = "No", "1" = "Yes")) + 
+  theme_minimal() +
+  labs(title = "Proportional Distribution of Account Status by Education Level",
+       x = "Education Level",
+       y = "Proportion",
+       fill = "Closed Account") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+Here, we proceed with a bivariate analysis to explore the relationship between `Education_Level` and `Closed_Account`. The bar plot shows the proportional distribution of account status by education level, highlighting the proportion of closed and active accounts for each education category. The plot suggests that there might be a relationship between education level and the likelihood of an account being closed, with some level showing a higher or lower proportion of closures: indeed, the education levels 'Doctorate' and 'Post-Graduate' show a slightly higher proportion of closed accounts compared to other levels. 
+
+```{r echo = F, fig.align='center'}
+data$Months_Inactive_12_mon <- as.factor(data$Months_Inactive_12_mon)
+
+ggplot(data, aes(x = Months_Inactive_12_mon, fill = Closed_Account)) +
+  geom_bar(position = "fill") +
+  labs(title = "Stacked Bar Plot of Account Closure by Inactivity",
+       x = "Months Inactive in Last 12 Months",
+       y = "Proportion of Accounts") +
+  scale_fill_manual(values = c("0" = "#FFE4C9", "1" = "#FA7070"), 
+                    labels = c("0" = "No", "1" = "Yes")) +
+  theme_minimal() +
+  labs(fill = "Closed Account")
+```
+
+This bivariate analysis examines the relationship between `Months_Inactive_12_mon` and `Closed_Account`: this stacked bar chart provides a visual representation of the relationship between account inactivity (measured in months within the last 12 months) and account closure status (where '0' signifies an open account and '1' signifies a closed account). The bars represent the proportion of accounts that have been inactive for a certain number of months. The chart suggests a trend where accounts with zero and four months of inactivity are more likely to be closed, while accounts with one, two, three and six months of inactivity are more likely to remain open. This could indicate that customers who are either very active or with moderate activity levels are more likely to close their accounts, while those customers who are more inactive are more likely to keep their accounts open.
+
+```{r echo = F, fig.align='center'}
+ggplot(data, aes(x = cut_width(Customer_Age, width = 10, center = 5), y = Total_Trans_Ct)) +
+  geom_boxplot(outlier.colour = "black", outlier.shape = 1, fill = "#FFE4C9", colour = "black") +  
+  scale_y_continuous(labels = comma) +
+  labs(title = "Customer Age vs Total Number of Transactions",
+       x = "Age Group",
+       y = "Total Transactions Count") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5),  
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.title.x = element_text(face = "bold"), 
+    axis.title.y = element_text(face = "bold"),  
+  )
+```
+
+With the following bivariate analysis we explore the relationship between `Customer_Age` and `Total_Trans_Ct` to understand how the total number of transactions varies across different age groups. The box plot provides a visual summary of the distribution of the total number of transactions for each age group, highlighting the median, quartiles, and potential outliers. The box plot shows that the number of transactions is relatively consistent across different age groups, and this suggests that the total number of transactions is not significantly influenced by age.
+
+```{r, echo = F, fig.align='center'}
+ggplot(data, aes(y = Income, x = Gender, fill = Closed_Account)) + 
+  geom_boxplot(outlier.colour = "black", outlier.shape = 1) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20),  
+    legend.position = "bottom") +
+  scale_fill_manual(values = c("0" = "#FFE4C9", "1" = "#FA7070")) +
+  labs(title = "Income and Gender Boxplot", fill = "Closed Account")
+```
+
+The last bivariate analysis explores the relationship between `Income`, `Gender`, and `Closed_Account`. The boxplot visualizes the distribution of income across genders, with an additional differentiation between accounts that are closed ('Yes') and those that are not ('No'). The boxplot analysis indicates that the median income and overall income distribution are similar for both genders regardless of whether the accounts are open or closed. Outliers suggest some individuals have significantly higher incomes in both categories. There's no visible difference in income related to account status. This suggests that income alone may not be a strong predictor of account closure.
+
+#### Correlation 
+
+```{r echo = F, fig.align='center', fig.dim=c(10,6)}
+cor_matrix <- cor(continuous_vars, use="complete.obs") 
+
+corrplot(cor_matrix, 
+         method="color", 
+         order="hclust",
+         tl.col="black", 
+         tl.srt = 45, 
+         tl.cex = 0.6,
+         addCoef.col = 'white',
+         number.cex = 0.6,
+         col = COL1("Purples", 10),
+         type = "lower",
+         diag=FALSE,
+         main = "\n\nCorrelation Plot of Numerical Variables") 
+```
+
+Finally, we present a correlation matrix which displays the correlation coefficients between pairs of numerical variables in the dataset. The color intensity and the number within each square represent the strength and direction of the correlation: the closer the number is to 1, the stronger the positive correlation, while the closer the number is to -1, the stronger the negative correlation. A number close to 0 indicates little to no linear relationship. 
+The correlation matrix reveals several key relationships between variables: `Total_Trans_Amt` and `Total_Trans_Ct` show a strong positive correlation, indicating that transaction counts and amounts tend to increase together. `Avg_Utilization_Ratio` and `Total_Revolving_Bal` have a moderate positive correlation, suggesting that higher revolving balances are generally associated with higher utilization ratios. There's also a noticeable positive correlation between `Months_Inactive_12_mon` and `Closed_Account`.
+`Customer_Age` and `Months_on_book` are highly correlated, likely reflecting that older customers have been with the bank longer.
+
+## Logistic Regression 
+
+#### Implementing the Logistic Regression Model
+
+In the forthcoming section of our report, we are set to employ a Logistic Regression Model to analyze how an individual's income and their gender may affect the probability that they will close a bank account. This statistical method will enable us to predict the odds of account closure based on these variables. We will specifically look at whether income influences the closure decision differently for men and women. To make sense of the results, we will interpret the model's coefficients, which quantify the relationship between the predictors (income and gender) and the likelihood of account closure.
+
+```{r}
+set.seed(1)
+model <- glm(Closed_Account ~ Income*Gender, data = data, family = binomial(link="logit")) 
+summary(model)
+
+income_range <- with(data, seq(min(Income, na.rm = TRUE), max(Income, na.rm = TRUE), length.out = 100))
+newdata <- expand.grid(Income = income_range, Gender = levels(data$Gender))
+newdata$Probability <- predict(model, newdata = newdata, type = "response")
+```
+
+The script begins by fitting a logistic regression model, with the intention of analyzing the interaction between income and gender in relation to the likelihood of a bank account being closed. The `glm` function specifies the model where `Closed_Account` is the dependent variable we're interested in, and `Income` and `Gender` are the independent variables, including their interaction term (Income\*Gender). The 'family' argument set to 'binomial' with the 'logit' link function indicates that we are modeling a binary outcome (account being closed or not) using logistic regression.
+
+Next, we generate predictions from our model. We create a range of income values that span from the minimum to the maximum income observed in our dataset, ensuring we cover the entire spectrum of our data. This range consists of 100 equally spaced values.
+
+We then set up a new data frame called `newdata`, which combines these income values with the different levels of gender found in our original dataset. This is achieved through the `expand.grid` function, which effectively creates all possible combinations of income and gender that we want to use for our predictions.
+
+Finally, we employ the 'predict' function to estimate the probabilities of account closure across our range of incomes for each gender within `newdata`.
+
+From the coefficients, we understand that the intercept term (-1.6018179) represents the estimated log-odds of account closure when income is zero and the individual is female. The coefficient for income suggests that, holding gender constant, a one-unit increase in income is associated with a negligible change in the log-odds of account closure. For gender, the coefficient (-0.44483) indicates that being male is associated with a decrease in the log-odds of account closure compared to being female. However, the interaction term (Income:GenderM) has a coefficient (0.0024540) that is not statistically significant (p value = 0.1231), suggesting that the effect of income on account closure does not differ significantly between genders. These findings imply that *while gender plays a significant role in account closure probability, income alone does not have a substantial impact once gender is taken into account*.
+
+```{r}
+ggplot(newdata, aes(x = Income, y = Probability, color = Gender)) +
+  geom_line() +
+  labs(title = "Effect of Income and Gender on the Probability of Closing an Account",
+       x = "Income",
+       y = "Probability of Account Closure",
+       color = "Gender") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),  
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.title.x = element_text(face = "bold"), 
+    axis.title.y = element_text(face = "bold"),  
+  )
+```
+
+The red line representing females remains consistently horizontal across all income levels, which implies that the propensity for females to close an account does not fluctuate with changes in income. In contrast, the blue line for males ascends steadily, suggesting an increasing probability of males closing an account as their income rises.
+
+#### Addressing Unbalanced Data
+
+The dataset is unbalanced, with a significantly higher proportion of open accounts compared to closed accounts. This imbalance can lead to biased model predictions, as the model may be more inclined to predict open accounts due to their higher representation in the dataset. In this section we have explicitly decided to address this issue by undersampling the majority class (open accounts) to balance the dataset. This approach involves randomly selecting a subset of open accounts to match the number of closed accounts, ensuring that both classes are equally represented in the data.
+
+```{r}
+set.seed(1)
+
+majority_indices <- which(data$Closed_Account == 0)
+minority_count <- sum(data$Closed_Account == 1)
+
+sampled_indices <- sample(majority_indices, size = minority_count, replace = FALSE)
+balanced_data <- data[c(sampled_indices, which(data$Closed_Account == 1)), ]
+balanced_model <- glm(Closed_Account ~ Income*Gender, data = balanced_data, family = binomial(link="logit"))
+```
+
+Now we can compare the confusion matrices of the unbalanced and balanced models to evaluate the impact of balancing the dataset on the model's predictive performance.
+
+```{r}
+# Unbalanced Confusion Matrix
+predicted_Y <- ifelse(predict(model, type = "response") > 0.5, 1, 0)
+actual_Y <- data$Closed_Account
+True.positive <- sum(predicted_Y[actual_Y == 1] == 1)
+True.negative <- sum(predicted_Y[actual_Y == 0] == 0)
+False.positive <- sum(predicted_Y[actual_Y == 0] == 1)
+False.negative <- sum(predicted_Y[actual_Y == 1] == 0)
+Confusion.Matrix <- matrix(c(True.positive, False.negative, 
+                             False.positive, True.negative),
+                           nrow = 2, byrow = TRUE)
+rownames(Confusion.Matrix) <- c("Actual Positive", "Actual Negative")
+colnames(Confusion.Matrix) <- c("Predicted Positive", "Predicted Negative")
+
+# Balanced confusion matrix
+predicted_Y_balanced <- ifelse(predict(balanced_model, type = "response") > 0.5, 1, 0)
+actual_Y_balanced <- balanced_data$Closed_Account
+True.positive_balanced <- sum(predicted_Y_balanced[actual_Y_balanced == 1] == 1)
+True.negative_balanced <- sum(predicted_Y_balanced[actual_Y_balanced == 0] == 0)
+False.positive_balanced <- sum(predicted_Y_balanced[actual_Y_balanced == 0] == 1)
+False.negative_balanced <- sum(predicted_Y_balanced[actual_Y_balanced == 1] == 0)
+
+Confusion.Matrix_balanced <- matrix(c(True.positive_balanced, False.negative_balanced, 
+                                      False.positive_balanced, True.negative_balanced),
+                                    nrow = 2, byrow = TRUE)
+rownames(Confusion.Matrix_balanced) <- c("Actual Positive", "Actual Negative")
+colnames(Confusion.Matrix_balanced) <- c("Predicted Positive", "Predicted Negative")
+
+Confusion.Matrix
+Confusion.Matrix_balanced
+```
+As shown in the confusion matrices, the balanced model has a higher true positive rate and a lower false positive rate compared to the unbalanced model. This indicates that balancing the dataset has improved the model's ability to correctly predict closed accounts, reducing the bias towards open accounts that was present in the unbalanced model. 
+
+```{r fig.align='center', echo = FALSE}
+income_range <- with(balanced_data, seq(min(Income, na.rm = TRUE), max(Income, na.rm = TRUE), length.out = 100))
+newdata_balanced <- expand.grid(Income = income_range, Gender = levels(balanced_data$Gender))
+newdata_balanced$Probability <- predict(balanced_model, newdata = newdata_balanced, type = "response")
+
+ggplot(newdata_balanced, aes(x = Income, y = Probability, color = Gender)) +
+  geom_line() +
+  labs(title = "Effect of Income and Gender after the Undersampling",
+       x = "Income",
+       y = "Probability of Account Closure",
+       color = "Gender") +
+  scale_y_continuous(labels = percent_format()) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),  
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.title.x = element_text(face = "bold"), 
+    axis.title.y = element_text(face = "bold"),  
+  )
+
+```
+
+The unbalanced dataset plot suggests a relatively flat effect of income on account closure probability for females and a moderate effect for males, with a narrow overall probability range (12%-18%). In contrast, **the balanced dataset plot reveals a clearer and steeper increase in closure probability for both genders as income rises**, with males showing a higher likelihood than females across the income spectrum, and a wider probability range (42%-54%). This suggests that balancing the dataset might uncover stronger and more differentiated relationships between the variables.
+
+#### Main conclusions
+
+To conclude the analysis of account closure probabilities in relation to income and gender, the logistic model provides insightful revelations. The baseline propensity for account closure is statistically significant for females when other variables are not considered, with the log-odds of account closure for females at the intercept being -1.548. While income appears to have a negligible impact on account closure probability for females, it is notable that **being male is associated with lower odds of closing an account but it is more sensitive to income levels**. The interaction between income and being male does not significantly alter the account closure probability, indicating that the influence of income on account closure is consistent across genders.
+
+The visual analysis confirms these findings, showing a flatter probability line for females across all income levels, whereas for males, there is a discernible positive slope, suggesting an increasing probability of account closure as income rises. These insights suggest that gender plays a more significant role in the likelihood of account closure than income alone. The lack of a significant interaction effect between income and gender indicates that income's influence on account closure decisions is uniform across both genders.
+
+Upon examination of the regression results, it becomes apparent that income does not exert a differential impact on the probability of account closure between males and females. This is evidenced by the non-significant interaction coefficient (Income:GenderM) obtained from the model. A significant coefficient for this interaction term would suggest a variance in the relationship between income and account closure likelihood across genders. However, given the lack of statistical significance, we infer that the effect of income on account closure is homogeneous for both genders when other variables are controlled. This indicates that while there may be distinct overall probabilities for males and females regarding account closures, with males generally less inclined to close their accounts, the influence of income on this decision-making process does not significantly diverge between the genders. Therefore, based on the analyzed data, income appears to be a uniform factor in predicting account closure probabilities across male and female account holders within the scope of this study.
+
+## K-NN Model
+
+We now proceed with the implementation of the K-Nearest Neighbors (K-NN) algorithm to predict the likelihood of account closure; focusing on the continuous predictors Total Trans Amt (Total Transaction Amount) and Total Trans Ct (Total Transaction Count) we aim to determine the optimal number of neighbors (k) that maximizes the predictive performance of our model.
+
+#### Splitting the dataset
+
+We start by splitting the dataset into training and validation sets to evaluate the performance of our K-NN model. We select two features (`Total_Trans_Amt` and `Total_Trans_Ct`) from both training and validation datasets (`data.train` and `data.val`) for the feature variables (`train.x` and `val.x`). We also extracts the last column from these datasets (Closed_Account) as the target variable (`train.y` and `val.y`) for both training and validation, respectively.
+
+```{r}
+set.seed(1)
+
+ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = F)
+data.train <- data[ids.train,]
+data.val <- data[-ids.train,] 
+
+train.x <- select(data.train, c("Total_Trans_Amt", "Total_Trans_Ct"))
+train.y <- data.train[,length(data.train)]
+val.x <- select(data.val, c("Total_Trans_Amt", "Total_Trans_Ct"))
+val.y <- data.val[,length(data.val)]
+```
+
+Here, we proceed by **standardizing the data** to ensure that all features are on the same scale, which is essential for the K-NN algorithm to function effectively: moreover, we carry out the standardization process on both the training and validation datasets separately to maintain consistency in the scaling of our features and to **avoid data leakage**.
+
+```{r}
+train.x.scaled <- scale(train.x)
+train.mean <- apply(train.x, MARGIN = 2, FUN = mean)
+train.sd <- apply(train.x, MARGIN = 2, FUN = sd)
+
+val.x.scaled <- scale(val.x, center = train.mean, scale = train.sd)
+```
+
+#### Implementing the K-NN Model
+
+Here we implement a procedure to evaluate the performance of a k-Nearest Neighbors (K-NN) classifier across a range of k values, from 1 to 50, on both training and validation datasets. We start by creating a sequence of k values from 1 to 50; each of these values will be used to train a kNN model to find the optimal number of neighbors. For each iteration, the function:
+- trains a K-NN model on the scaled training dataset (train.x.scaled) and makes predictions on both the scaled training data and the scaled validation data (val.x.scaled) using the current k value;\
+- calculates the misclassification rate for both training and validation predictions by comparing predicted labels to actual labels; 
+- computes the probability of positive class predictions (prob.yes.train and prob.yes.val) based on the predicted probabilities attached to the kNN predictions;
+- calculates the Area Under the Curve (AUC) for both training and validation sets using these probabilities. AUC is a performance metric for binary classification models;
+- determines the number of true positives, true negatives, false positives, and false negatives for both training and validation datasets, which are essential for calculating sensitivity, specificity, and accuracy;
+- calculates sensitivity (true positive rate), specificity (true negative rate), and accuracy for both training and validation predictions;
+- finally, it aggregates these metrics into a vector results for each k value.
+
+```{r results='hide', warning=FALSE, message=FALSE}
+k.grid <- 1:50
+set.seed(1)
+k.metrics <- sapply(k.grid, function(k) {
+  knn.fit.train <- knn(train = train.x.scaled, test = train.x.scaled, cl = train.y, k = k, prob = T)
+  knn.fit.val <- knn(train = train.x.scaled, test = val.x.scaled, cl = train.y, k = k, prob = T)
+  
+  misclass.train <- 1 - mean(train.y == knn.fit.train)
+  misclass.val <- 1 - mean(val.y == knn.fit.val)
+  
+  prob.yes.train <- ifelse(knn.fit.train == "1", attr(knn.fit.train, "prob"), 1 - attr(knn.fit.train, "prob"))
+  prob.yes.val <- ifelse(knn.fit.val == "1", attr(knn.fit.val, "prob"), 1 - attr(knn.fit.val, "prob"))
+  
+  auc.train <- auc(train.y == "1", prob.yes.train)
+  auc.val <- auc(val.y == "1", prob.yes.val)
+  
+  true.positives.train <- sum(knn.fit.train[which(train.y == 1)] == "1")
+  true.negatives.train <- sum(knn.fit.train[which(train.y == 0)] == "0")
+  false.positives.train <- sum(knn.fit.train[which(train.y == 0)] == "1")
+  false.negatives.train <- sum(knn.fit.train[which(train.y == 1)] == "0")
+  
+  sensitivity.train <- true.positives.train / (true.positives.train + false.negatives.train)
+  specificity.train <- true.negatives.train / (true.negatives.train + false.positives.train)
+  accuracy.train <- (true.positives.train + true.negatives.train) / length(knn.fit.train)
+  
+  true.positives.val <- sum(knn.fit.val[which(val.y == 1)] == "1")
+  true.negatives.val <- sum(knn.fit.val[which(val.y == 0)] == "0")
+  false.positives.val <- sum(knn.fit.val[which(val.y == 0)] == "1")
+  false.negatives.val <- sum(knn.fit.val[which(val.y == 1)] == "0")
+  
+  sensitivity.val <- true.positives.val / (true.positives.val + false.negatives.val)
+  specificity.val <- true.negatives.val / (true.negatives.val + false.positives.val)
+  accuracy.val <- (true.positives.val + true.negatives.val) / length(knn.fit.val)
+  
+                                             
+  results <- c(misclass.train, misclass.val, auc.train, auc.val, sensitivity.train, sensitivity.val, specificity.train, specificity.val, accuracy.train, accuracy.val)
+  
+  return(results)
+})
+```
+
+Here we transform the K-NN model evaluation results into a data frame where each row corresponds to a different k value (number of neighbors) and label the columns with descriptive names for each performance metric, such as **misclassification rates**, **AUC scores**, **sensitivity**, **specificity**, and **accuracy** for both training and validation datasets. This structure makes it easier to analyze the impact of varying k values on model performance.
+
+```{r}
+k.metrics <- data.frame(t(k.metrics))
+colnames(k.metrics) <- c("Misclassification_Train", "Misclassification_Val", "AUC_Train", "AUC_Val", "Sensitivity_Train", "Sensitivity_Val", "Specificity_Train", "Specificity_Val", "Accuracy_Train", "Accuracy_Val")
+```
+
+#### Comparing Performances
+
+We now proceed to create several plots to visualize the performance of our K-NN model across different k values by comparing the performances obtained in the train and validation sets; these plots will help us identify the optimal number of neighbors that maximize the model's predictive power.
+
+**Performance Plot using Accuracy**
+
+```{r echo = FALSE, fig.align='center'}
+ggplot(data = k.metrics, aes(x = k.grid)) + 
+  geom_line(aes(y = Accuracy_Train, color = "Train"), linewidth = 1)+
+  geom_line(aes(y = Accuracy_Val, color = "Validation"), linewidth = 1) +
+  geom_vline(xintercept = which(k.metrics$Accuracy_Val == max(k.metrics$Accuracy_Val)), linetype = "dashed", color = "#bc4749") + 
+  labs(x = "Number of Neighbors k", y = "Accuracy", legend = "bottom", title = "Accuracy Train Vs Validation") +
+  theme_classic() +
+  scale_color_manual(values = c("Train" = "black", "Validation" = "#bc4749") ,name = "") +
+  theme(legend.position = "top", plot.title = element_text(hjust = 0.5))
+
+best.k.acc <- k.grid[which.max(k.metrics$Accuracy_Val)]
+```
+
+The above graph shows the performance of our model with different numbers of neighbors by evaluating their accuracy. The training accuracy starts high at lower k values and generally decreases as k increases, which is typical since a very low k can lead to overfitting, where the model captures noise in the training data. The validation accuracy, while lower and more variable, suggests how well the model generalizes to unseen data. The optimal k value, indicated by the dashed vertical line around **k=18** and **k=20** is where the validation accuracy peaks, suggesting it's the best compromise between underfitting and overfitting for this model.
+
+**Performance Plot using Misclassification Rate**
+
+```{r echo = FALSE, fig.align='center'}
+ggplot(data = k.metrics, aes(x = k.grid)) + 
+  geom_line(aes(y = Misclassification_Train, color = "Train"), linewidth = 1)+
+  geom_line(aes(y = Misclassification_Val, color = "Validation"), linewidth = 1) +
+  geom_vline(xintercept = which(k.metrics$Misclassification_Val == min(k.metrics$Misclassification_Val)), linetype = "dashed", color = "#bc4749") + 
+  labs(x = "Number of Neighbors k", y = "Misclassification Rate", legend = "bottom", title = "Misclassification Train Vs Validation") +
+  theme_classic() +
+  scale_color_manual(values = c("Train" = "black", "Validation" = "#bc4749") ,name = "") +
+  theme(legend.position = "top", plot.title = element_text(hjust = .5))
+
+best.k.misc <- best.k.acc <- k.grid[which.max(k.metrics$Misclassification_Val)]
+```
+
+The code above plots misclassification rates for our KNN model on the training data (in black) and validation data (in red) over a range of k values (number of neighbors). The y-axis indicates the misclassification rate, which is lower near the start, especially for the training data, and gradually increases with k. The x-axis represents the number of neighbors k. The training misclassification rate starts very low, suggesting potential overfitting with a very small number of neighbors, but then stabilizes. The validation misclassification rate decreases initially, then levels off and runs parallel to the training misclassification rate, suggesting an optimal balance between bias and variance, again around **k=18** and **k=20**.
+
+**Performance Plot using AUC**
+
+```{r echo = FALSE, fig.align='center'}
+ggplot(data = k.metrics, aes(x = k.grid)) + 
+  geom_line(aes(y = AUC_Train, color = "Train"), linewidth = 1)+
+  geom_line(aes(y = AUC_Val, color = "Validation"), linewidth = 1) +
+  geom_vline(xintercept = which(k.metrics$AUC_Val == max(k.metrics$AUC_Val)), linetype = "dashed", color = "#bc4749") + 
+  labs(x = "Number of Neighbors k", y = "AUC Score", legend = "bottom", title = "AUC Score Train Vs Validation") +
+  theme_classic() +
+  scale_color_manual(values = c("Train" = "black", "Validation" = "#bc4749") ,name = "") +
+  theme(legend.position = "top", plot.title = element_text(hjust = .5))
+
+best.k.auc <- best.k.acc <- k.grid[which.max(k.metrics$AUC_Val)]
+```
+
+This graph displays the Area Under the Curve (AUC) scores for both training (in black) and validation (in red) datasets of our model, plotted over a range of k values. The y-axis represents the AUC score, and the x-axis denotes the number of neighbors k. The training AUC starts very high, near 1.00, indicating overfit on the training data. It shows a gentle decline as k increases, which is common as a larger number of neighbors typically smoothens the decision boundary and may decrease the model's ability to fit the training data closely. The validation AUC increases sharply at first, then levels off around k=10, suggesting that the model's ability to generalize improves with a few neighbors and stabilizes or slightly declines with more neighbors. The dashed vertical line suggests an **optimal k value of about 48** based on the validation AUC score, where the model likely strikes a balance between underfitting and overfitting. The closeness of the two lines towards the right side of the graph indicates that the model, with higher k values, has a similar performance on both training and validation data, which could be indicative of a more robust model with better generalization capabilities.
+
+**Performance Plot using Sensitivity**
+
+```{r echo = FALSE, fig.align='center'}
+ggplot(data = k.metrics, aes(x = k.grid)) + 
+  geom_line(aes(y = Sensitivity_Train, color = "Train"), linewidth = 1)+
+  geom_line(aes(y = Sensitivity_Val, color = "Validation"), linewidth = 1) +
+  geom_vline(xintercept = which(k.metrics$Sensitivity_Val == max(k.metrics$Sensitivity_Val)), linetype = "dashed", color = "#bc4749") + 
+  labs(x = "Number of Neighbors k", y = "Sensitivity", legend = "bottom", title = "Sensitivity Train Vs Validation") +
+  theme_classic() +
+  scale_color_manual(values = c("Train" = "black", "Validation" = "#bc4749") ,name = "") +
+  theme(legend.position = "top", plot.title = element_text(hjust = .5))
+
+best.k.sens <- best.k.acc <- k.grid[which.max(k.metrics$Sensitivity_Val)]
+```
+
+Here, the above code plots the sensitivity (true positive rate) of our KNN model for both the training set (black line) and the validation set (red line) across different k values. The sensitivity (the ability of the model to correctly identify the positive cases out of all actual positive cases) is highest for the training set at lower k values and decreases with more neighbors. The validation sensitivity also decreases initially and then levels off, with a slight fluctuation as k increases. Again, the vertical dashed line marks the k value with the highest sensitivity on the validation set, suggesting a value of **k=18** as the best from a sensitivity standpoint.
+
+**Performance Plot using Specificity**
+
+```{r echo = FALSE, fig.align='center'}
+ggplot(data = k.metrics, aes(x = k.grid)) + 
+  geom_line(aes(y = Specificity_Train, color = "Train"), linewidth = 1)+
+  geom_line(aes(y = Specificity_Val, color = "Validation"), linewidth = 1) +
+  geom_vline(xintercept = which(k.metrics$Specificity_Val == max(k.metrics$Specificity_Val)), linetype = "dashed", color = "#bc4749") + 
+  labs(x = "Number of Neighbors k", y = "Specificity", legend = "bottom", title = "Specificity Train Vs Validation") +
+  theme_classic() +
+  scale_color_manual(values = c("Train" = "black", "Validation" = "#bc4749") ,name = "") +
+  theme(legend.position = "top", plot.title = element_text(hjust = .5))
+
+best.k.spec <- best.k.acc <- k.grid[which.max(k.metrics$Specificity_Val)]
+```
+
+Lastly, the above graph displays specificity (the true negative rate) for our KNN model on the training set (black line) and validation set (red line) across varying k values. Both lines start with a bit of fluctuation; the training set specificity is initially high and stabilizes as k increases, while the validation set specificity improves and then roughly parallels the training specificity. In this case we have that a value of **k = 21** maximizes specificity. Overall, the model maintains high specificity across most k values, particularly in the validation set, suggesting it's consistently good at correctly identifying negative cases (open accounts).
+
+**Confusion Matrix**
+
+Now, we'll create a function to generate the confusion matrix for the KNN model with the optimal k value for each performance metric we previously plotted (accuracy, misclassification rate, AUC, sensitivity, and specificity) to evaluate the model's predictive performance in terms of true positives, true negatives, false positives, and false negatives. Remember that true negatives are the number of correctly identified negative cases (0 or open accounts), true positives are the number of correctly identified positive cases (1 or closed accounts), false negatives are the number of actual positive cases incorrectly identified as negative, and false positives are the number of actual negative cases incorrectly identified as positive.
+
+```{r}
+set.seed(1)
+confusion.matrix.k <- function(k) {
+  knn.fit <- knn(train = train.x.scaled, test = val.x.scaled, cl = train.y, k = k, prob = T)
+  
+  true.positives <- sum(knn.fit[which(val.y == 1)] == "1")
+  true.negatives <- sum(knn.fit[which(val.y == 0)] == "0")
+  false.positives <- sum(knn.fit[which(val.y == 0)] == "1")
+  false.negatives <- sum(knn.fit[which(val.y == 1)] == "0")
+
+  cm <- matrix(c(true.positives, false.positives,
+               false.negatives, true.negatives), nrow = 2, ncol = 2)
+  row.names(cm) = c("Actual Positive", "Actual Negative")
+  colnames(cm) = c("Predicted Positive", "Predicted Negative")
+  return(cm)
+} 
+```
+
+```{r}
+confusion.matrix.k(best.k.acc)
+confusion.matrix.k(best.k.misc)
+confusion.matrix.k(best.k.auc)
+confusion.matrix.k(best.k.sens)
+confusion.matrix.k(best.k.spec)
+```
+
+### Interpretation and choice of the best k
+
+The varying numbers in these matrices reflect how the model's predictions shift when optimizing for different performance metrics. A higher number of true positives and true negatives indicate better performance, but the trade-offs between false positives and false negatives can significantly affect the choice of k, depending on the cost or impact of each type of error in the specific application context.
+Notice that since we are dealing with an unbalanced dataset, as shown in the EDA, with a higher number of open accounts than closed accounts, the model will tend to predict more open accounts than closed accounts. This is reflected in the confusion matrices, where the number of true negatives is much higher than the number of true positives.
+
+- For the model tuned for *accuracy* (`best.k.acc)`, we see a balanced trade-off between true positives and true negatives against the false negatives and false positives. 
+- When tuned for *misclassification rate* (`best.k.misc`), there's an increase in false negatives and false positives, indicating a different balance in the type of errors made. 
+- The *AUC*-optimized model (`best.k.auc`) shows a similar error distribution to the accuracy-optimized one. 
+- Optimizing for *sensitivity* (`best.k.sens`), the model slightly improves true positives but maintains a comparable count of false positives. 
+- Lastly, the *specificity*-tuned model (`best.k.spec`) demonstrates similar scores to the accuracy.
+
+In conclusion, the choice of the best k value depends on our goal and the relative importance of different types of errors. For a balanced approach, the model optimized for accuracy provides the best trade-off between true positives and true negatives, with a relatively low number of false positives and false negatives. However, since in our case the bank is interested in predicting accounts that will close (and we'll see later with the cost matrix that closing accounts determine higher losses), we would suggest to maximize predictions of clients that are effectively leaving in order to act preventively and offer them an incentive to stay. Therefore, we would recommend the **model optimized for sensitivity**, which is designed to maximize true positives, with a k value of **18**.
+
+## Best Model
+
+```{r echo = FALSE, visible = FALSE}
+# Include all variables again in our train and validation sets
+train.x <- data.train[, - ncol(data.train)]
+train.y <- data.train[,ncol(data.train)]
+val.x <- data.val[, -ncol(data.val)]
+val.y <- data.val[, ncol(data.val)]
+```
+
+### Feature Selection
+
+#### VIF
+Here we will select which features to include in our model. We will start by examining the variance inflation factor to detect multicollinearity among the features. The VIF is a measure of how much the variance of the estimated regression coefficients is increased due to multicollinearity in the model.
+Its formula is $$VIF_i = \frac{1}{1-R^2_i }$$
+A VIF value greater than 5 indicates a problematic level of multicollinearity. To use the VIF function we'll quickly fit a logistic regression model including all the covariates in our dataframe.
+
+```{r}
+logit.full <- glm(data = data.train, data.train$Closed_Account~., family = "binomial")
+vif(logit.full)
+```
+
+```{r}
+ggplot(data.train, aes(x = Credit_Limit, y = Avg_Open_To_Buy)) + 
+  geom_point(alpha = 0.1, col = "#bc6c25") +
+  theme_classic() +
+  labs(title = "Correlation between Credit_Limit and Avg_Open_To_Buy") + 
+  theme(legend.position = "top", plot.title = element_text(hjust = .5))
+```
+
+We notice a critical level of multicollinearity, specifically between the `Credit_Limit` and `Avg_Open_To_Buy` variables, with an exceptionally high Variance Inflation Factor (VIF). This issue is graphically represented with a scatter plot that illustrates the near-perfect linear relationship between the two variables, with the points densely clustered along a diagonal line stretching from the origin upwards. In response to this, we removed the `Avg_Open_To_Buy` variable from our dataset, as it was almost an exact mirror of the `Credit_Limit` variable, evidenced by their correlation coefficient of 0.99. The plot itself serves as a visual confirmation of this redundancy, with every increase in `Credit_Limit` paralleled by an increase in `Avg_Open_To_Buy`. Since the two were basically the same variable, **we decided to remove `Avg_Open_To_Buy` to avoid multicollinearity issues in our model**.
+
+
+```{r}
+data.train$Avg_Open_To_Buy = NULL
+data.val$Avg_Open_To_Buy = NULL
+```
+
+#### Stepwise Selection
+Next we will choose the best features to include in our model using stepwise selection. This method is used to select the best subset of features by iteratively adding or removing variables based on AIC and BIC criteria.
+We will use the `step` function to perform forward, backward and bidirectional selection, and then compare the results to choose the best model.
+
+```{r message=FALSE, results = "hide", warning=FALSE}
+# Stepwise model selection using Akaike Information Criterion
+logit.full <- glm(data = data.train, Closed_Account~., family = "binomial") # baseline
+
+logit.fw.ak <- step(glm(Closed_Account ~ 1, family = "binomial", data = data.train), scope = formula(logit.full), direction = "forward")
+logit.bw.ak <- step(logit.full, direction = "backward")
+logit.bi.ak <- step(logit.full, direction = "both")
+
+# Stepwise model selection using Bayesian Information Criterion
+logit.fw.bay <- step(glm(Closed_Account ~ 1, family = "binomial", data = data.train), scope = formula(logit.full), direction = "forward", k = log(nrow(data.train)))
+logit.bw.bay <- step(logit.full, direction = "backward", k = log(nrow(data.train)))
+logit.bi.bay <- step(logit.full, direction = "both", k = log(nrow(data.train)))
+```
+
+
+In both cases we get the same variables selected. We will now compare the models selected by the Akaike and Bayesian Information Criteria with the full model performing an anova test to check if there's a significant difference between them. We start from the null hypothesis of model equivalence:
+
+```{r}
+anova(logit.bi.ak, logit.full, test = "Chisq") 
+anova(logit.full, logit.bi.bay, test = "Chisq") 
+```
+From the results of the first test, by looking at the p-values, we fail to reject the null hypothesis of model equivalence, while in the second test we reject it. Based on the ANOVA results, Model 2 (the model selected according to BIC) we have evidence that excluding the additional variables does not significantly worsen the model's ability to predict closed accounts. Therefore, considering the trade-off between model complexity and explanatory power, the BIC model might be preferable in this case.
+
+#### Principal Component Analysis
+We now proceed with the implementation of Principal Component Analysis (PCA) to reduce the dimensionality of our dataset and identify the most important components that explain the variance in the data. This technique transforms the original features into a set of linearly uncorrelated variables called principal components, which are ordered by the amount of variance they explain. The first step consist in selecting and standardizing the continuous variables in our dataset to ensure that all features are on the same scale, which is essential for PCA to function effectively. We will then fit a PCA model to our training data and extract the principal components. To fit the model we will use the `princomp` function, which performs PCA on the input data and returns the principal components.
+
+```{r}
+data.continuous <- data.train[, sapply(data.train, is.numeric)]
+data.continuous <- data.continuous[, !colnames(data.continuous) %in% c("Closed_Account")]
+data.continuous.scaled <- scale(data.continuous)
+pca <- princomp(data.continuous.scaled, cor = T, fix_sign = F)
+pca$loadings
+data.val.continuous <- data.val[, sapply(data.val, is.numeric)]
+data.val.continuous <- data.val.continuous[, !colnames(data.val.continuous) %in% c("Closed_Account")]
+data.val.continuous.scaled <- scale(data.val.continuous)
+pca.val <- predict(pca, data.val.continuous.scaled)
+pca.val <- pca.val[, 1:10]
+```
+
+```{r}
+pca.var <- pca$sdev^2
+pca.var.percent <- pca.var / sum(pca.var)
+cum.pca.var.percent <- cumsum(pca.var.percent)
+pca.explained <- data.frame(
+  Component = 1:length(pca.var.percent),
+  Variance = pca.var.percent,
+  CumulativeVariance = cum.pca.var.percent
+)
+pca.explained
+```
+
+We display the results of our principal components analysis by showing the loadings of each variable on the principal components and the summary of the PCA model. The loadings indicate the correlation between the variables and the principal components, with higher absolute values indicating a stronger relationship. The summary provides information on the proportion of variance explained by each principal component, the cumulative proportion of variance explained, and the eigenvalues of each component. We also created a data frame to print out the explained variance information ordered by their portion of variance explained. In this PCA analysis, the data's complexity has been reduced to 14 principal components, with the first component capturing the largest variance portion (18.5%) and subsequent components explaining progressively less. The cumulative variance covered by the components suggests that, for instance, the first 9 to 10 components may be sufficient for most analytical purposes, encompassing around 90% of the data's variability. High positive or negative loadings indicate a strong association with the component; for example, `Customer_Age` largely influences `Comp.12`, possibly suggesting a demographic trend, while `Total_Revolving_Bal` significantly impacts `Comp.6`, hinting at financial behaviors.
+
+In order to decide the number of components to keep in our model, we respectively consider the variance explained by each component, the percentage of variance explained, and the cumulative percentage of variance explained; we then create a scree plot to display the variance each component contributes and a line plot to show the cumulative variance explained by the components, marking significant thresholds. Moreover, we create a biplot for a graphical summary of the PCA.
+
+```{r}
+blue_palette <- brewer.pal(9, "Blues")[4:9]  
+scree.plot <- barplot(pca.var, main="Scree Plot", xlab="Principal Component", ylab="Variance Explained",
+                      col=blue_palette, ylim=c(0, max(pca.var) * 1.2))
+text(x=scree.plot, y=pca.var + max(pca.var) * 0.05, labels=round(pca.var, 3), pos=3, cex=.7)
+```
+
+The first bar, representing Component 1 (Comp.1), is the tallest, indicating that it explains the most variance within our dataset at approximately 2.595 units. Each subsequent component explains less variance, with the values labeled on top of each bar. By the time we reach Component 14 (the last one), the variance explained is close to zero, at 0.005 units. The pattern of the bars shows a rapid decrease from Comp.1 to Comp.5, after which the decrease in variance explained slows down, suggesting that the first few components capture most of the important information. In PCA, we look for a point where the decrease in variance explained becomes more gradual, known as the "elbow," to determine the number of components to keep; in our graph, the elbow appears to occur around Comp.5 or Comp.6, suggesting that subsequent components contribute relatively little additional information.
+
+```{r}
+plot(cum.pca.var.percent, type='b', xlab="Number of Principal Components", ylab="Cumulative Variance Explained",
+     main="Cumulative Scree Plot", pch=19, frame=FALSE, col="blue")
+abline(h=0.8, col="red", lty=2) # Adding a line at 80% cumulative variance explained
+abline(h=0.9, col="green", lty=2) # Adding a line at 90% cumulative variance explained
+abline(h=0.95, col="orange", lty=2) # Adding a line at 95% cumulative variance explained
+text(x=1:length(cum.pca.var.percent), y=cum.pca.var.percent, labels=round(cum.pca.var.percent, 2), pos=3)
+```
+
+Furthermore, from the above plot, it appears that around 10 components are required to explain 90% of the variance, which might be considered sufficient for our analysis, ensuring that most of the information in the original data is retained while reducing dimensionality. Indeed, we proceed by reducing the number of components to 10 and fitting a logistic regression model using these components to predict the likelihood of account closure.
+
+```{r}
+pca.data <- predict(pca, data.continuous.scaled)
+pca.data <- pca.data[, 1:10]
+logit.pca <- glm(Closed_Account ~ ., data = data.frame(pca.data, Closed_Account = data.train$Closed_Account), family = "binomial")
+summary(logit.pca)
+```
+
+### Comparison and Choice of the best model
+
+For the final step of this section, we compare the models obtained through the different feature selection methods (VIF, Stepwise Selection, PCA) to determine the best model to predict account closure.
+
+```{r}
+thresh <- 0.5
+
+pred.full.raw <- predict(logit.full, newdata = val.x, type = "response")
+pred.full <- ifelse(pred.full.raw > thresh, 1, 0)
+pred.bic.raw <- predict(logit.bi.bay, newdata = val.x, type = "response")
+pred.bic <- ifelse(pred.bic.raw > thresh, 1, 0)
+pred.aic.raw <- predict(logit.bi.ak, newdata = val.x, type = "response")
+pred.aic <- ifelse(pred.aic.raw > thresh, 1, 0)
+pred.pca.raw <- predict(logit.pca, newdata = data.frame(pca.val), type = "response")
+pred.pca <- ifelse(pred.pca.raw > thresh, 1, 0)
+cm.full <- confusionMatrix(as.factor(data.val$Closed_Account), as.factor(pred.full))
+cm.bic <- confusionMatrix(as.factor(data.val$Closed_Account), as.factor(pred.bic))
+cm.aic <- confusionMatrix(as.factor(data.val$Closed_Account), as.factor(pred.aic))
+cm.pca <- confusionMatrix(as.factor(data.val$Closed_Account), as.factor(pred.pca))
+
+cm.full$table
+cm.bic$table
+cm.aic$table
+cm.pca$table
+```
+
+By analyzing the above confusion matrices applied to our four tuned models we can see that:  
+- **Full model**: the model has a relatively high number of true negatives and true positives, indicating good classification performance for both classes. However, there are more false negatives than false positives, which suggests a higher cost of missing the positive class.  
+- **BIC model**: similar to the first model, this one also performs well in identifying the negative class but has a slightly higher number of false positives and one less true positive compared to the first matrix.  
+- **AIC model**: this model shows a slight improvement over the second model, with one fewer false positive and one fewer false negative, which means it has better accuracy for both predicting negatives and capturing positives.  
+- **PCA model**: the model associated with this matrix is better at predicting the negative class (fewest false positives) but worse at predicting the positive class (most false negatives).
+
+In summary, all models are relatively consistent in predicting the negative class but vary slightly in their ability to capture the positive class; this is no surprise since as we previously highlight the dataset is unbalanced, with more open accounts than closed accounts.
+
+Again, we proceed to create ROC curves for the full, AIC, BIC, and PCA models; each illustrate the trade-off between sensitivity (true positive rate) and specificity (1 - false positive rate) across different thresholds. Moreover, the AUC (Area Under the Curve) provides a single measure of overall model performance, with higher values indicating better discrimination ability.
+
+```{r echo=FALSE, fig.align='center', message=F}
+par(mfrow = c(2,2))
+roc.full <- pROC::roc(data.val$Closed_Account, pred.full.raw, plot = T, lwd = 3, auc.polygon = T, print.auc = T, main = "ROC Curve full model")
+roc.aic <- pROC::roc(data.val$Closed_Account, pred.aic.raw, plot = T, lwd = 3, auc.polygon = T, print.auc = T, main = "AIC")
+roc.bic <- pROC::roc(data.val$Closed_Account, pred.bic.raw, plot = T, lwd = 3, auc.polygon = T, print.auc = T, main = "BIC")
+roc.pca <- pROC::roc(data.val$Closed_Account, pred.pca.raw, plot = T, lwd = 3, auc.polygon = T, print.auc = T, main = "PCA")
+```
+
+As shown by the above plots, the full model has an AUC of 0.924, which suggests a very good predictive performance. It's closely followed by the AIC model with an AUC of 0.923 and the BIC model with an AUC of 0.925. These three models perform almost identically in terms of their ability to distinguish between the positive and negative classes, and their AUC values indicate high accuracy. In contrast, the PCA model exhibits a lower AUC of 0.857. While this still represents a good level of predictive ability, it is notably less effective than the full, AIC, and BIC models. This might be due to the PCA model's reduced feature set, which, although simplifying the model, may have omitted some important predictive information contained in the full data.
+
+Finally, we compare the performances of the full, AIC, BIC, and PCA models in terms of accuracy, sensitivity, specificity, positive predictive value, negative predictive value, precision, recall, F1 score, and AUC. This comparison will help us determine which model is the best at predicting account closure based on the chosen performance metrics.
+
+```{r}
+comparison.mat <- rbind(c(cm.full$overall["Accuracy"], cm.full$byClass[1:7], roc.full$auc),
+                        c(cm.aic$overall["Accuracy"], cm.aic$byClass[1:7], roc.aic$auc), 
+                        c(cm.bic$overall["Accuracy"], cm.bic$byClass[1:7], roc.bic$auc),
+                        c(cm.pca$overall["Accuracy"], cm.pca$byClass[1:7], roc.pca$auc))
+rownames(comparison.mat) <- c("logistic.full", "logistic.aic", "logistic.bic", "logistic.pca")
+colnames(comparison.mat) <- c("Accuracy", "Sensitivity", "Specificity", "Positive Predicted Value", "Negative Predicted Value", "Precision", "Recall", "F1", "AUC")
+comparison.mat
+```
+
+The performance metrics indicate that the full, AIC, and BIC logistic regression models are all highly effective, with the full model exhibiting a slight edge in accuracy and sensitivity, meaning it's marginally better at correctly identifying true positives. Specificity is highest for the full model, suggesting better true negative identification. Precision across all models is impressively high, indicating a strong likelihood that predicted positives are correct. While the negative predicted value is lower across the models, it doesn't vary much between them. The F1 scores are comparable, suggesting a balanced precision-recall trade-off. The AIC and BIC models show a trivial advantage in AUC, implying a marginally better discriminative ability between positive and negative classes. The PCA model, while still effective, lags behind the others in most metrics, indicating that the reduced feature set may have compromised its predictive power. This suggests that while the full model is better at prediction, the AIC and BIC models offer a better balance in discriminating between the positive and negative classes.
+
+### Cross Validation
+We will now perform a 10 fold cross validation to measure our models' predictive performance on unseen validation sets. We will report the mean error obtained by each model and see which one overall performs best. This time we will investigate the ROC score.
+
+```{r message=FALSE, warning=FALSE, results='hide'}
+set.seed(1)
+train.control <- trainControl(method = "cv", number = 10, classProbs = T, summaryFunction = twoClassSummary, verboseIter = T)
+levels(data.train$Closed_Account) <- c("No","Yes") 
+
+cvlogit.full <- train(Closed_Account ~ ., data = data.train, method = "glm", family = "binomial", trControl = train.control, metric = "ROC")
+cvlogit.bic <- train(formula(logit.bi.bay), data = data.train, method = "glm", family = "binomial", trControl = train.control, metric = "ROC")
+cvlogit.aic <- train(formula(logit.bi.ak), data = data.train, method = "glm", family = "binomial", trControl = train.control, metric = "ROC")
+cvlogit.pca <- train(formula(logit.pca), data = data.frame(pca.data, Closed_Account = data.train$Closed_Account), method = "glm", family = "binomial", trControl = train.control, metric = "ROC")
+
+cv.matrix <- rbind(cvlogit.full$results$ROC, cvlogit.bic$results$ROC, cvlogit.aic$results$ROC, cvlogit.pca$results$ROC)
+colnames(cv.matrix) <- "Mean ROC Score after 10fold cv"
+rownames(cv.matrix) <- c("cvlogit.full", "cvlogit.bay", "cvlogit.aic", "cvlogit.pca")
+```
+
+```{r}
+cv.matrix
+```
+ 
+The mean ROC scores from 10-fold cross-validation suggest that the logistic regression models cvlogit.full, cvlogit.bay, and cvlogit.ak perform quite similarly and very well, with ROC scores above 0.91 indicating high model accuracy. In contrast, cvlogit.pca, which likely uses principal component analysis for dimensionality reduction, shows a noticeably lower mean ROC score, suggesting it may not capture the variance as effectively as the other models in this context.
+We will exclude a priori the full model because its high score is most likely due to overfitting, among the remaining models, we will select the one having the highest score which is the one selected using the AIC criterion, which as we will see in the following analysis it will also be the one maximizing the gain. We'll now compute the predicted probabilities using this model.
+
+### Predictions on data.test using aic model
+```{r}
+data.test <- data.test[!apply(data.test == "Unknown", 1, any),]
+
+data.test$Months_Inactive_12_mon <- factor(data.test$Months_Inactive_12_mon)
+
+predicted_probabilities_test <- predict(logit.bi.ak, newdata = data.test, type = "response")
+predictions_df <- data.frame(CLIENTNUM = data.test$CLIENTNUM, Predicted_Closure = predicted_probabilities_test)
+write.csv(predictions_df, "predicted_account_closures_prob.csv", row.names = FALSE) 
+```
+
+### Cost matrix
+In the context of our problem, the cost of misclassification is not uniform. Predicting that an account will close when it actually remains open (FP) may result in a missed opportunity to retain a customer, leading to potential revenue loss of 30. On the other hand, predicting that an account will remain open when it actually closes (FN) may result in a loss of revenue from the account of 50. To account for these different costs, we will create a cost matrix to evaluate the performance of our models based on the financial implications of their predictions.
+
+```{r}
+cost_of_TP <- 0  
+cost_of_FP <- 30  # Cost of an unnecessary offer due to a false alarm (False Positive)
+cost_of_FN <- 50  # Cost when we fail to retain a customer who closes the account (False Negative)
+cost_of_TN <- 0
+
+cost_mat <- matrix(c(cost_of_TN, cost_of_FP, cost_of_FN, cost_of_TP),
+                   ncol = 2,
+                   byrow = TRUE,
+                   dimnames = list(c("Actual Stay", "Actual Close"),
+                                   c("Predicted Stay", "Predicted Close")))
+cost_mat
+```
+
+### Threshold Selection
+To evaluate the models' performance in terms of the cost matrix, we have to pick a threshold, compute the confusion matrix, multiply it by the cost matrix, and finally sum all the entries (to get the total cost). 
+
+#### Treshold = 0.5
+First of all we proceed with the classic threshold 0.5 and compute the total cost for each model on the validation set.
+
+```{r}
+total_cost_full <- sum(cm.full$table * cost_mat)
+total_cost_aic <- sum(cm.aic$table * cost_mat)
+total_cost_bic <- sum(cm.bic$table * cost_mat)
+total_cost_pca <- sum(cm.pca$table * cost_mat)
+
+cat("Cost Full Model: ", total_cost_full, "\nCost AIC Model: ", total_cost_aic, "\nCost BIC Model: ", total_cost_bic, "\nCost PCA Model: ", total_cost_pca)
+```
+The lowest cost is obtained by the full logistic regression model.This suggests that the full logistic regression model is the most cost-effective in terms of minimizing the financial impact of misclassification errors.
+
+#### Treshold = 0.35
+Now we will try to find the optimal threshold for each model that minimizes the total cost. We will do this by computing the total_cost of each model for a threshold equal to 0.35 and selecting the one that minimizes the cost.
+
+```{r}
+thresh <- 0.35
+predict.Close.raw <- predict(logit.full, newdata = data.val[1:length(data.val) - 1], type = "response")
+predict.Close <- ifelse(predict.Close.raw > thresh, 1, 0)
+cm.full <- confusionMatrix(as.factor(data.val$Closed_Account), as.factor(predict.Close))
+total_cost_full1 <- sum(cm.full$table * cost_mat)
+total_cost_full1
+
+predict.Close.raw <- predict(logit.bi.ak, newdata = data.val[1:length(data.val) - 1], type = "response")
+predict.Close <- ifelse(predict.Close.raw > thresh, 1, 0)
+cm.aic <- confusionMatrix(as.factor(data.val$Closed_Account), as.factor(predict.Close))
+total_cost_aic1 <- sum(cm.aic$table * cost_mat)
+total_cost_aic1
+
+predict.Close.raw <- predict(logit.bi.bay, newdata = data.val[1:length(data.val) - 1], type = "response")
+predict.Close <- ifelse(predict.Close.raw > thresh, 1, 0)
+cm.bic <- confusionMatrix(as.factor(data.val$Closed_Account), as.factor(predict.Close))
+total_cost_bic1 <- sum(cm.bic$table * cost_mat)
+total_cost_bic1
+
+predict.Close.raw <- predict(logit.pca, newdata = data.frame(pca.val), type = "response")
+predict.Close <- ifelse(predict.Close.raw > thresh, 1, 0)
+cm.pca <- confusionMatrix(as.factor(data.val$Closed_Account), as.factor(predict.Close))
+total_cost_pca1 <- sum(cm.pca$table * cost_mat)
+total_cost_pca1
+```
+
+#### Comparison between the two thresholds
+
+Now that we computed the total cost for each model with two different thresholds, we can compare the results and choose the best model.
+```{r}
+total_costs_05 <- c(
+  logistic.full = total_cost_full,
+  logistic.aic = total_cost_aic,
+  logistic.bic = total_cost_bic,
+  logistic.pca = total_cost_pca
+)
+total_costs_035 <- c(
+  logistic.full = total_cost_full1,
+  logistic.aic = total_cost_aic1,
+  logistic.bic = total_cost_bic1,
+  logistic.pca = total_cost_pca1
+)
+
+comparison_df <- data.frame(
+  `Cost 0.5` = total_costs_05,
+  `Cost 0.35` = total_costs_035
+)
+comparison_df
+
+comparison.mat <- cbind(comparison.mat, comparison_df)
+
+comparison.mat
+```
+
+From a sensitivity point of view we can notice that lowering the threshold from 0.5 to 0.35 generally reduces the total cost for all models. This suggests that using a lower threshold leads to more predictions of account closures, which may help in capturing more true positives (correctly predicted closures) at the expense of potentially increasing false positives (incorrectly predicted closures). 
+
+Concerning the models' performance in terms of the cost matrix, **with a lower threshold the aic model is the most cost-effective.** 
+
+#### Visualization
+Finally, we will visualize the total cost of each model at the 0.35 threshold and compare it with the AUC value for each model. This will provide a visual representation of the trade-off between model cost and predictive performance, helping to identify the best model based on the chosen metrics.
+
+```{r echo=FALSE, fig.align='center'}
+auc_values <- c(
+  logistic.full = roc.full$auc,
+  logistic.aic = roc.aic$auc,
+  logistic.bic = roc.bic$auc,
+  logistic.pca = roc.pca$auc
+)
+
+plot_data <- data.frame(
+  Model = names(total_costs_035),
+  Cost = as.numeric(total_costs_035),
+  AUC = as.numeric(auc_values)
+)
+
+ggplot(plot_data, aes(x = AUC, y = Cost, color = Model)) +
+  geom_point(size = 4) +
+  geom_text(aes(label = Model), vjust = -0.5, size = 3) +
+  theme_minimal() +
+  labs(title = "Model Cost vs. AUC at Threshold 0.35",
+       x = "AUC (Area Under Curve)",
+       y = "Total Cost")
+```
+The first noticeable aspect of the graph is the clustering of points representing the full logistic, the AIC, and the BIC models in the bottom right, all with slightly higher AUC values above 0.92, while the PCA model is positioned elsewhere: in the top left. This highlights a significantly higher total cost and a lower AUC (0.85) compared to the other three models.
+
+From a performance standpoint, this indicates that **the full logistic, AIC, and BIC models exhibit better overall performance**, as evidenced by their clustering in the bottom right of the graph with slightly higher AUC values above 0.92. Conversely, the PCA model, positioned in the top left, demonstrates inferior performance, characterized by a significantly higher total cost and a lower AUC of 0.85 compared to the other three models.
+
+### Threshold selection to maximize profit 
+
+To select the threshold that maximize the profit we will use the following function. 
+It computes the total financial impact by evaluating the performance of a binary classification model based on given predictions and actual labels, considering gains and losses associated with true positives, false positives, true negatives, and false negatives.
+```{r}
+calculate_financial_impact <- function(threshold, predictions, actual) {
+  pred_labels <- ifelse(predictions > threshold, 1, 0)
+  
+
+  TP <- sum(pred_labels == 1 & actual == 1)
+  FP <- sum(pred_labels == 1 & actual == 0)
+  TN <- sum(pred_labels == 0 & actual == 0)
+  FN <- sum(pred_labels == 0 & actual == 1)
+  
+
+  gain_from_TP_FP <- (TP + FP) * 20 
+  gain_from_TN <- TN * 50 
+  loss_from_FN <- FN * -50 
+  
+  total_gain <- gain_from_TP_FP + gain_from_TN + loss_from_FN
+  return(total_gain)
+}
+```
+
+What we are going to do now is to perform threshold selection to maximize profit by iteratively evaluating the financial impact at different thresholds for each model's predictions. Then, we determine the optimal threshold that yields the highest financial gain and assess model performance using ROC curves and AUC values. Finally, we conduct k-fold cross-validation to further validate the model's performance.
+
+For each model we will calculate the financial impact at different thresholds, identify the optimal threshold that maximizes profit, and evaluate the performance based on the chosen threshold:
+
+```{r fig.align='center', fig.dim=c(15,13)}
+set.seed(1)
+thresholds <- seq(0.1, 0.9, by = 0.01)
+par(mfrow = c(2,2))
+
+financial_impacts <- sapply(thresholds, function(thresh) calculate_financial_impact(thresh, pred.full.raw, data.val$Closed_Account))
+optimal_threshold_full <- thresholds[which.max(financial_impacts)]
+max_gain <- max(financial_impacts)
+plot(thresholds, financial_impacts, type = 'l', col = 'blue', xlab = "Threshold", ylab = "Financial Impact",
+     main = "Financial Impact of Different Thresholds Full Model")
+abline(v = optimal_threshold_full, col = 'red', lty = 2)
+text(optimal_threshold_full, max_gain, paste("\n\nOptimal Threshold:", round(optimal_threshold_full, 2), "\nGain:", max_gain), pos = 4, cex = 0.9)
+
+financial_impacts <- sapply(thresholds, function(thresh) calculate_financial_impact(thresh, pred.bic.raw, data.val$Closed_Account))
+optimal_threshold_bic <- thresholds[which.max(financial_impacts)]
+max_gain <- max(financial_impacts)
+plot(thresholds, financial_impacts, type = 'l', col = 'blue', xlab = "Threshold", ylab = "Financial Impact",
+     main = "Financial Impact of Different Thresholds BIC Model")
+abline(v = optimal_threshold_bic, col = 'red', lty = 2)
+text(optimal_threshold_bic, max_gain, paste("\n\nOptimal Threshold:", round(optimal_threshold_bic, 2), "\nGain:", max_gain), pos = 4, cex = 0.9)
+
+financial_impacts <- sapply(thresholds, function(thresh) calculate_financial_impact(thresh, pred.aic.raw, data.val$Closed_Account))
+optimal_threshold_aic <- thresholds[which.max(financial_impacts)]
+max_gain <- max(financial_impacts)
+plot(thresholds, financial_impacts, type = 'l', col = 'blue', xlab = "Threshold", ylab = "Financial Impact",
+     main = "Financial Impact of Different Thresholds AIC Model")
+abline(v = optimal_threshold_aic, col = 'red', lty = 2)
+text(optimal_threshold_aic, max_gain, paste("\n\nOptimal Threshold:", round(optimal_threshold_aic, 2), "\nGain:", max_gain), pos = 4, cex = 0.9)
+
+financial_impacts <- sapply(thresholds, function(thresh) calculate_financial_impact(thresh, pred.pca.raw, data.val$Closed_Account))
+optimal_threshold <- thresholds[which.max(financial_impacts)]
+max_gain <- max(financial_impacts)
+plot(thresholds, financial_impacts, type = 'l', col = 'blue', xlab = "Threshold", ylab = "Financial Impact",
+     main = "Financial Impact of Different Thresholds PCA Model")
+abline(v = optimal_threshold, col = 'red', lty = 2)
+text(optimal_threshold, max_gain, paste("\n\nOptimal Threshold:", round(optimal_threshold, 2), "\nGain:", max_gain), pos = 4, cex = 0.9)
+```
+Some insights from the analysis of the **Full model**:
+- **The optimal threshold for the logit.full model is 0.27**.
+- The model achieves an accuracy of 88.85%, indicating the proportion of correctly classified instances among all instances.
+- Sensitivity (true positive rate) measures the proportion of actual positive cases that the model correctly identifies. It is 91.48% in this case.
+- PPV represents the proportion of instances predicted as positive that are truly positive. Here it is 95.12%: a really high percentage.
+- Balanced accuracy provides a more reliable measure when there is an imbalance in the dataset between positive and negative cases. It is 83.08% in this evaluation.
+
+Some insights from the analysis of the **BIC model**:
+- **The optimal threshold for maximizing profit is 0.38**.
+- The model achieves an accuracy of 89.05%, with a 95% confidence interval between 88.24% and 89.83%.
+- The sensitivity, or true positive rate, is 92.02%, indicating the model's ability to correctly identify true positives.
+- The positive predictive value is high at 94.85%, indicating that when the model predicts an account closure, it is correct 94.85% of the time.
+- The balanced accuracy, considering both sensitivity and specificity, is 82.55%, reflecting a relatively good overall performance of the model in distinguishing between positive and negative cases.
+
+Some insights from the analysis of the **AIC model**:
+- **For the this model, an optimal threshold of 0.29**.
+- High positive predictive value (PPV) of 95.50% indicates a strong probability of correctly identifying positive cases.
+- Sensitivity of 90.49% demonstrates the model's effectiveness in accurately detecting positive instances.
+
+Some insights from the analysis of the **PCA model**:
+- **The optimal threshold for maximizing financial gain with the PCA model is 0.33**.
+- The model achieves an accuracy of 86.46%, indicating its overall effectiveness in classifying instances correctly.
+- Sensitivity (true positive rate) stands at 91.22%, suggesting a strong ability to identify true positives, albeit with a specificity (true negative rate) of 60.79%, indicating a lower capability in identifying true negatives.
+- The positive predictive value (PPV) is notably high at 92.62%, denoting a high correctness rate when predicting account closures.
+- The balanced accuracy, considering both sensitivity and specificity, is 76.01%, indicating a fair overall performance in distinguishing between positive and negative cases.
+
+
+### ROC and AUC comparison
+At this point we create a function called `plot_auc` that will help us compare the performance of different models by generating ROC curves and calculating their AUC values. This function will take predictions and actual labels as inputs and plot the ROC curve, annotating it with the AUC value. Additionally, if we specify an optimal threshold (that we found in the previous steps), it will mark that point on the curve.
+
+```{r echo=FALSE, fig.align='center', message=FALSE, warning=FALSE}
+plot_auc <- function(predictions, actual, optimal_threshold, main_title = "ROC Curve") {
+  roc_obj <- roc(actual, predictions)
+  plot(roc_obj, main = main_title)
+  auc_value <- auc(roc_obj)
+  print(auc_value)
+  legend("bottomright", legend = paste("AUC:", round(auc_value, 3)), bty = "n")
+  sens_spec <- coords(roc_obj, x = optimal_threshold, input = "threshold", ret = c("sensitivity", "specificity"))
+  points(sens_spec[1], sens_spec[2], col = "red", pch = 19, cex = 2)
+  text(sens_spec[1], sens_spec[2], labels = paste("Thresh:", round(optimal_threshold, 2)), pos = 4)
+}
+```
+
+```{r echo=FALSE, fig.align='center'}
+par(mfrow = c(2,2))
+plot_auc(pred.bic.raw, data.val$Closed_Account, optimal_threshold_bic, "ROC for BIC Model")
+plot_auc(pred.full.raw, data.val$Closed_Account, optimal_threshold_full, "ROC for Full Model")
+plot_auc(pred.aic.raw, data.val$Closed_Account, optimal_threshold_aic, "ROC for AIC Model")
+plot_auc(pred.pca.raw, data.val$Closed_Account, optimal_threshold, "ROC for PCA Model")
+```
+We've generated ROC curves for the BIC, Full, AIC, and PCA models. Here are the AUC values for each model:
+- **BIC Model**: AUC = **0.925**
+- **Full Model**: AUC = **0.924**
+- **AIC Model**: AUC = **0.923**
+- **PCA Model**: AUC = **0.857**
+
+Which one maximizes gain?
+```{r}
+gains <- c(
+  logistic.full = calculate_financial_impact(optimal_threshold_full, pred.full.raw, data.val$Closed_Account),
+  logistic.aic = calculate_financial_impact(optimal_threshold_aic, pred.aic.raw, data.val$Closed_Account),
+  logistic.bic = calculate_financial_impact(optimal_threshold_bic, pred.bic.raw, data.val$Closed_Account),
+  logistic.pca = calculate_financial_impact(optimal_threshold, pred.pca.raw, data.val$Closed_Account)
+)
+max_gain_model <- names(gains)[which.max(gains)]
+cat("The model with the maximum gain is:", max_gain_model, "with a gain of", gains[max_gain_model], "\n")
+```
+
+These lines of code compute the financial impact for each model using the optimal threshold previously determined. They then compare the gains from each model and identifies the model with the highest gain. The result we obtained at the end of the analysis is that the **logistic.aic model** is the one that maximizes the gain.
+
+
+```
