@@ -10,14 +10,13 @@ library(dummy)
 library(caret)
 
 
-data = read.csv("TelecomChurn.csv")
+data = read.csv("Telecom_Churn.csv")
 
 # 3333 rows and 20 columns
 
 head(data)
 
 str(data)
-
 sum(is.na(data)) # no missing values 
 
 summary(data)
@@ -47,6 +46,8 @@ churn_percent <- data %>%
   summarise(Count = n(), .groups = "drop") %>%
   mutate(Percent = Count / sum(Count) * 100)
 
+#print(churn_percent)
+
 ggplot(churn_percent, aes(x = "", y = Percent, fill = Churn)) +
   geom_col(width = 1, color = 1) +
   coord_polar("y", start = 0) +
@@ -58,8 +59,9 @@ ggplot(churn_percent, aes(x = "", y = Percent, fill = Churn)) +
 
 
 continuous_vars <- data[, sapply(data, is.numeric)]
+#print(continuous_vars)
 categorical_vars <- data[, sapply(data, is.factor) & !names(data) %in% "Churn"]
-
+#print(categorical_vars)
 # univariate analysis for categorical variables (State, International.plan, Voice.mail.plan)
 
 long_data <- categorical_vars %>%
@@ -209,7 +211,7 @@ data %>%
   labs(title = "Churn by International Plan", x = "International Plan", y = "Count", fill = "Churn") +
   theme_minimal() 
 
-# we see that almost all customers that have an international plan churned
+# we see that more than half of the customers that have an international plan churned
 
 
 cor_mat <-
@@ -324,11 +326,12 @@ chisq.test(contingency.table)
 
 contingency.table <- table(data$Total.night.calls, data$Churn)
 chisq.test(contingency.table)
+# p-value is not significant, we fail to reject the null hypothesis and conclude that Total night calls does not influence the churn rate
 
 #POINT 3
-# our task is to predict whether customers will churn or not. this task is useful for the company 
+# Our task is to predict whether customers will churn or not. this task is useful for the company 
 # to take actions to prevent customers from churning.
-# moreover, it can helps the company to understand the reasons behind the churn and take actions to 
+# Moreover, it can helps the company to understand the reasons behind the churn and take actions to 
 # improve the service and customer satisfaction by offering also promotions to the customers that are more likely to churn.
 
 
@@ -348,6 +351,27 @@ chisq.test(contingency.table)
 # investigate some interesting relationships between the variables
 
 # we'll proceed with customer service call and churn
+
+# We only include customers who have made a service call
+service_calls <- data %>%
+  filter(Customer.service.calls > 0)
+
+# The proportion of customers who churned after making a service call:
+churn_percent <- service_calls %>%
+  group_by(Customer.service.calls, Churn) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  mutate(Percent = Count / sum(Count) * 100)
+
+ggplot(churn_percent, aes(x = Customer.service.calls, y = Percent, fill = Churn)) +
+  geom_col(width = 0.7, color = 1) +
+  labs(title = "Churn by Customer Service Calls", x = "Customer Service Calls", y = "Percent", fill = "Churn") +
+  theme_minimal() +
+  scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    legend.position = "bottom"
+  )
+
 
 
 
@@ -391,6 +415,9 @@ group_plt(Region)
 # now let's re-do the chi square
 contingency.table <- table(data$Region, data$Churn)
 chisq.test(contingency.table)
+# H0: Region and Churn are independent
+# H1: Region and Churn are dependent
+#p-value > 0.05, we fail to reject the null hypothesis, therefore the region does not influence the churn rate
 
 # Outliers detection
 detect.outliers <- function(data, feature) {
@@ -477,3 +504,4 @@ data.val.scaled <- data.frame(data.val.scaled, State = data.val$State, Churn = d
 
 head(data.train.scaled)
 
+# Linear regression model 
