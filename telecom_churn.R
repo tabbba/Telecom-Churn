@@ -8,18 +8,14 @@ library(stringr)
 library(glue)
 library(dummy)
 library(caret)
-<<<<<<< HEAD
 library(car)
 library(pROC)
-=======
 library(glmnet)
 library(rpart)
 library(rpart.plot)
 library(randomForest)
->>>>>>> 608991d97d28a69f057f4a15f17b10ee3b74cf68
 
-
-data = read.csv("Telecom_Churn.csv")
+data = read.csv("TelecomChurn.csv")
 
 # 3333 rows and 20 columns
 
