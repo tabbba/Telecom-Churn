@@ -8,9 +8,13 @@ library(stringr)
 library(glue)
 library(dummy)
 library(caret)
+library(glmnet)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
 
 
-data = read.csv("TelecomChurn.csv")
+data = read.csv("Telecom_Churn.csv")
 
 # 3333 rows and 20 columns
 
@@ -386,7 +390,7 @@ newdata$Probability <- predict(model, newdata = newdata, type = "response")
 newdata$Odds <- newdata$Probability / (1 - newdata$Probability)
 head(newdata)
 
-# plot
+
 # plotting the probability of churn based on customer service calls
 ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
   geom_line() + 
@@ -409,7 +413,7 @@ minority_count <- sum(data$Churn == 'True')
 sampled_indices <- sample(majority_indices, size = minority_count, replace = FALSE)
 balanced_data <- data[c(sampled_indices, which(data$Churn == 'True')), ]
 
-levels(data$Churn) # original levels --> i needed this step since i was getting some errors due to the factorisation
+levels(data$Churn) # original levels --> i needed this step since i was getting some errors due to the factorization
 balanced_data$Churn <- as.factor(balanced_data$Churn)
 levels(balanced_data$Churn)
 
@@ -471,6 +475,7 @@ colnames(Confusion.Matrix_balanced) <- c("Predicted Positive", "Predicted Negati
 
 Confusion.Matrix
 Confusion.Matrix_balanced
+
 
 
 # POINT 5 
@@ -602,4 +607,75 @@ data.val.scaled <- data.frame(data.val.scaled, State = data.val$State, Churn = d
 
 head(data.train.scaled)
 
+
 # Linear regression model 
+model <- glm(Churn ~ ., family = binomial, data = data.train.scaled)
+summary(model)
+
+# Predictions
+predictions <- predict(model, newdata = data.val.scaled, type = "response")
+predictions <- ifelse(predictions > 0.5, 1, 0)
+
+# Confusion matrix
+confusion_matrix <- table(data.val.scaled$Churn, predictions)
+confusion_matrix
+
+# Accuracy and precision
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+precision <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2])
+precision
+
+
+# Lasso regularization
+lasso_model <- cv.glmnet(as.matrix(data.train.scaled[, -which(names(data.train.scaled) %in% c("Churn", "State"))]), 
+                         data.train.scaled$Churn, 
+                         family = "binomial", 
+                         alpha = 1, 
+                         nfolds = 10)
+
+plot(lasso_model)
+
+
+
+# Get the best lambda value
+best_lambda <- lasso_model$lambda.min
+best_lambda
+
+coef(lasso_model, s = "lambda.min")
+
+# Predictions
+predictions <- predict(lasso_model, newx = as.matrix(data.val.scaled[, -which(names(data.val.scaled) %in% c("Churn", "State"))]), s = best_lambda, type = "response")
+predictions <- ifelse(predictions > 0.5, 1, 0)
+
+# Confusion matrix
+confusion_matrix <- table(data.val.scaled$Churn, predictions)
+confusion_matrix
+
+# Accuracy and precision
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+precision <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2])
+precision
+
+
+
+# Decision trees
+tree_model <- rpart(Churn ~ ., data = data.train.scaled, method = "class")
+
+rpart.plot(tree_model)
+
+# Predictions
+predictions <- predict(tree_model, newdata = data.val.scaled, type = "class")
+
+# Confusion matrix
+confusion_matrix <- table(data.val.scaled$Churn, predictions)
+confusion_matrix
+
+# Accuracy and precision
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+precision <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2])
+precision
+
+
