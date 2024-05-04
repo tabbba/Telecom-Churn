@@ -18,7 +18,8 @@ library(pROC)
 library(cluster)
 library(factoextra)
 library(sf)
-
+library(latex2exp)
+library(gridExtra)
 
 data = read.csv("TelecomChurn.csv")
 
@@ -487,6 +488,7 @@ ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
        y = "Probability of Churn") +
   scale_y_continuous(labels = scales::percent_format()) +  # Convert y-axis into percentage format
   theme_minimal() +  # Use a minimal theme
+  geom_hline(yintercept = 0.5, colour = "red", linetype = "dashed")
   theme(
     plot.title = element_text(hjust = 0.5), 
     axis.text.x = element_text(angle = 45, hjust = 1), 
@@ -748,11 +750,44 @@ comparison_df
 
 
 # LASSO
+set.seed(1)
+ctrl <- trainControl(method = "cv", number = 10)
+lasso <- train(Churn ~ ., data = data.train, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
+max(lasso$results$Accuracy)
+lasso$bestTune
 
+lasso.plot <- lasso %>% 
+  ggplot(aes(x = lambda, y = Accuracy)) + 
+  geom_line() + 
+  geom_point() +
+  geom_text(aes(label = sprintf("%.3f", Accuracy)), check_overlap = TRUE, vjust = -0.5, size = 2.5) + 
+  scale_x_continuous(limits = c(0, 0.10)) + 
+  labs(x = TeX("Lambda ($\\lambda$)"), y = "Accuracy", title = "Accuracy vs. Lambda for Lasso Regularization") +
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
 
+#RIDGE
+set.seed(1)
+ridge <- train(Churn ~ ., data = data.train, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
+max(ridge$results$Accuracy)
+ridge$bestTune
 
+ridge.plot <- ridge %>% 
+  ggplot(aes(x = lambda, y = Accuracy)) + 
+  geom_line() + 
+  geom_point() +
+  geom_text(aes(label = sprintf("%.3f", Accuracy)), check_overlap = TRUE, vjust = -0.5, size = 2.5) + 
+  labs(x = TeX("Lambda ($\\lambda$)"), y = "Accuracy", title = "Accuracy vs. Lambda for Ridge Regularization") +
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
 
-# da rivedere tutto e migliorare 
+grid.arrange(lasso.plot, ridge.plot, top = "Penalized Approaches for Logistic Regression")
+
+# The difference between the two in terms of accuracy is negligible. Ridge attains a higher lambda value in its best accuracy score.
 
 # CLUSTERING PRIMA BOZZA
 # preparing data
