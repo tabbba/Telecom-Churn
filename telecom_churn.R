@@ -17,7 +17,7 @@ library(randomForest)
 library(pROC)
 library(cluster)
 library(factoextra)
-
+library(sf)
 
 
 data = read.csv("TelecomChurn.csv")
@@ -325,6 +325,88 @@ ggplot(data, aes(x = State, fill = Churn)) +
   scale_y_continuous(limits = c(-35, 100)) +
   scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
   coord_polar(start = 0)
+
+
+
+us_map <- map_data("state") %>% 
+  as_tibble()
+
+us_map %>%
+  ggplot(aes(long, lat, map_id = region)) + 
+  geom_map(
+    map =us_map,
+    color = "gray80",
+    fill = "gray30",
+    size = 0.3
+  ) + 
+  coord_map("ortho", orientation = c(39, -98, 0)) + 
+  labs(
+    title = "US Map",
+    subtitle = "Based on Latitude and Longitude"
+  ) + theme(plot.title = element_text(hjust=0.5))
+
+state_names <- c(KS = "kansas", OH = "ohio", NJ = "new jersey", OK = "oklahoma",
+                 AL = "alabama", MA = "massachusetts", MO = "missouri", LA = "louisiana",
+                 WV = "west virginia", IN = "indiana", RI = "rhode island", IA = "iowa",
+                 MT = "montana", NY = "new york", ID = "idaho", VT = "vermont",
+                 VA = "virginia", TX = "texas", FL = "florida", CO = "colorado",
+                 AZ = "arizona", SC = "south carolina", NE = "nebraska", WY = "wyoming",
+                 HI = "hawaii", IL = "illinois", NH = "new hampshire", GA = "georgia",
+                 AK = "alaska", MD = "maryland", AR = "arkansas", WI = "wisconsin",
+                 OR = "oregon", MI = "michigan", DE = "delaware", UT = "utah",
+                 CA = "california", MN = "minnesota", SD = "south dakota", NC = "north carolina",
+                 WA = "washington", NM = "new mexico", NV = "nevada", DC = "district of columbia",
+                 KY = "kentucky", ME = "maine", MS = "mississippi", TN = "tennessee",
+                 PA = "pennsylvania", CT = "connecticut", ND = "north dakota")
+
+churn.tbl <- data %>% select(State, Churn) %>%
+  group_by(State) %>%
+  summarize(
+    total_customers = n(),
+    churned_customers = sum(Churn == "True"),
+    churn_rate = (churned_customers / total_customers),
+    churn_rate_txt = scales::percent(churn_rate)
+  ) %>%
+  mutate(full_state = state_names[as.character(State)]) %>%
+  ungroup() %>% 
+  left_join(us_map, by=c("full_state" = "region"))
+
+us_map_sf <- st_as_sf(us_map, coords = c("long", "lat"), crs = 4326, agr = "constant")
+
+centroids <- us_map_sf %>%
+  group_by(region) %>%
+  summarise(geometry = st_centroid(st_union(geometry)))
+
+centroids_df <- as.data.frame(st_coordinates(centroids))
+centroids_df$region <- centroids$region
+
+churn.tbl <- churn.tbl %>%
+  left_join(centroids_df, by = c("full_state" = "region"))
+
+churn.tbl %>%
+  ggplot(aes(long, lat)) + 
+  geom_map(
+    aes(map_id = full_state),
+    map = us_map,
+    color = "gray86",
+    fill = "gray30",
+    size = 0.3
+  ) + coord_map("ortho", orientation = c(39, -98, 0)) + geom_polygon(aes(group = group, fill = churn_rate), color="black") +
+  scale_fill_gradient2("",low = "#18BC9C", mid = "white", high = "#E31A1C", midpoint = 0.10, labels = scales::percent) + 
+  geom_text(aes(x = X, y = Y, label = State), stat = "unique", size = 3, inherit.aes = FALSE, fontface = "bold") +
+  theme_void() + 
+  theme(
+    plot.title = element_text(size=18, face="bold", color = "#2C3E50"),
+    legend.position = "right"
+  ) + 
+  labs(
+    title = "Churn Rate Across US States",
+    x = "",
+    y = ""
+  ) + 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+  ) 
 
 # Investigate the relationship between state and churn with a chi-squared test of independence
 # H0: State and Churn are independent
