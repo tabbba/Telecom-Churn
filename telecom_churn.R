@@ -12,8 +12,11 @@ library(car)
 library(pROC)
 library(glmnet)
 library(rpart)
-library(rpart.plot)
+library(rpart.plot) 
 library(randomForest)
+library(pROC)
+
+
 
 data = read.csv("TelecomChurn.csv")
 
@@ -599,7 +602,65 @@ akaike.metrics
 bayesian.mat <- confusion.mat(data.val, bayesian.both, "Churn", 0.5)
 bayesian.metrics <- get.metrics(bayesian.mat)
 bayesian.metrics
+
 # Slightly better results with akaike, maybe dropping all the region features as BIC does is too big of a loss of informations
+
+# full logistic model
+full.mat <- confusion.mat(data.val, logistic.baseline, "Churn", 0.5)
+full.metrics <- get.metrics(full.mat)
+full.metrics
+
 
 # ROC curves
 
+par(mfrow = c(2, 2))
+
+roc_full <- roc(data.val$Churn, predict(logistic.baseline, newdata = data.val, type = "response"), 
+                plot = TRUE, main = "ROC Curve Full Model", col = "purple", lwd = 3, 
+                auc.polygon = TRUE, print.auc = TRUE)
+
+roc_akaike <- roc(data.val$Churn, predict(akaike.both, newdata = data.val, type = "response"), 
+                  plot = TRUE, main = "AIC Model", col = "blue", lwd = 3, 
+                  auc.polygon = TRUE, print.auc = TRUE)
+
+roc_bayesian <- roc(data.val$Churn, predict(bayesian.both, newdata = data.val, type = "response"), 
+                    plot = TRUE, main = "BIC Model", col = "red", lwd = 3, 
+                    auc.polygon = TRUE, print.auc = TRUE)
+
+par(mfrow = c(1, 1))
+
+# AUC values
+auc_akaike <- as.numeric(auc(roc(data.val$Churn, predict(akaike.both, newdata = data.val, type = "response"))))
+auc_bayesian <- as.numeric(auc(roc(data.val$Churn, predict(bayesian.both, newdata = data.val, type = "response"))))
+auc_full <- as.numeric(auc(roc(data.val$Churn, predict(logistic.baseline, newdata = data.val, type = "response"))))
+
+
+
+# comparison (for now) between full, aic, bic 
+akaike_df <- data.frame(Model = "Akaike",
+                        Accuracy = akaike.metrics$Accuracy,
+                        Precision = akaike.metrics$Precision,
+                        Recall = akaike.metrics$Recall,
+                        F1_Score = akaike.metrics$F1,
+                        AUC = auc_akaike)
+
+bayesian_df <- data.frame(Model = "Bayesian",
+                          Accuracy = bayesian.metrics$Accuracy,
+                          Precision = bayesian.metrics$Precision,
+                          Recall = bayesian.metrics$Recall,
+                          F1_Score = bayesian.metrics$F1,
+                          AUC = auc_bayesian)
+
+full_df <- data.frame(Model = "Full Logistic",
+                      Accuracy = full.metrics$Accuracy,
+                      Precision = full.metrics$Precision,
+                      Recall = full.metrics$Recall,
+                      F1_Score = full.metrics$F1,
+                      AUC = auc_full)
+
+comparison_df <- bind_rows(akaike_df, bayesian_df, full_df)
+comparison_df
+
+
+
+# LASSO
