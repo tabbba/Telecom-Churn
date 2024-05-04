@@ -15,6 +15,8 @@ library(rpart)
 library(rpart.plot) 
 library(randomForest)
 library(pROC)
+library(cluster)
+library(factoextra)
 
 
 
@@ -664,3 +666,42 @@ comparison_df
 
 
 # LASSO
+
+
+
+
+# da rivedere tutto e migliorare 
+
+# CLUSTERING PRIMA BOZZA
+# preparing data
+clustering_data <- read.csv("TelecomChurn.csv")
+
+#keep only numeric
+clustering_data <- clustering_data[, sapply(clustering_data, is.numeric)]
+
+
+# scale data
+clustering_data <- scale(clustering_data)
+
+# number of K
+# elbow rule plot
+fviz_nbclust(clustering_data, kmeans, method = "wss") +
+  labs(subtitle = "WSS - Elbow method")
+# avg silhouette plot
+fviz_nbclust(clustering_data, kmeans, method = "silhouette") +
+  labs(subtitle = "Silhouette method")
+
+# K-means clustering
+set.seed(123)
+kmeans_model <- kmeans(clustering_data, centers = 2, nstart = 25)
+kmeans_model
+
+# silhouette results
+silhouette <- silhouette(kmeans_model$cluster, dist(clustering_data))
+mean(silhouette[, 3])
+
+# visualization
+fviz_cluster(kmeans_model, data = clustering_data, geom = "point", stand = FALSE, ellipse.type = "convex") +
+  labs(title = "K-means Clustering") +
+  theme_minimal()
+
