@@ -790,15 +790,38 @@ grid.arrange(lasso.plot, ridge.plot, top = "Penalized Approaches for Logistic Re
 # The difference between the two in terms of accuracy is negligible. Ridge attains a higher lambda value in its best accuracy score.
 
 # CLUSTERING PRIMA BOZZA
+
+
+# CLUSTERING PRIMA BOZZA
 # preparing data
+
 clustering_data <- read.csv("TelecomChurn.csv")
 
-#keep only numeric
-clustering_data <- clustering_data[, sapply(clustering_data, is.numeric)]
+clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Churn", "State"))]
 
+# let s drop all the minutes one
+clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.minutes", "Total.eve.minutes", "Total.night.minutes", "Total.intl.minutes"))]
 
-# scale data
-clustering_data <- scale(clustering_data)
+# Creating new features
+clustering_data$Total.call.charge <- clustering_data$Total.day.charge + clustering_data$Total.eve.charge + clustering_data$Total.night.charge + clustering_data$Total.intl.charge
+clustering_data$Total.calls <- clustering_data$Total.day.calls + clustering_data$Total.eve.calls + clustering_data$Total.night.calls + clustering_data$Total.intl.calls
+
+# drop them
+clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.charge", "Total.eve.charge", "Total.night.charge", "Total.intl.charge"))]
+clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.calls", "Total.eve.calls", "Total.night.calls", "Total.intl.calls"))]
+
+numerical_vars <- sapply(clustering_data, is.numeric)
+clustering_data[numerical_vars] <- scale(clustering_data[numerical_vars])
+
+convert_yes_no <- function(column) {
+  ifelse(column == "Yes", 1, 0)
+}
+
+clustering_data$International.plan <- convert_yes_no(clustering_data$International.plan)
+clustering_data$Voice.mail.plan <- convert_yes_no(clustering_data$Voice.mail.plan)
+
+head(clustering_data)
+
 
 # number of K
 # elbow rule plot
@@ -817,8 +840,17 @@ kmeans_model
 silhouette <- silhouette(kmeans_model$cluster, dist(clustering_data))
 mean(silhouette[, 3])
 
+# plot silhouette
+fviz_silhouette(silhouette) +
+  theme_minimal()
+
 # visualization
 fviz_cluster(kmeans_model, data = clustering_data, geom = "point", stand = FALSE, ellipse.type = "convex") +
   labs(title = "K-means Clustering") +
   theme_minimal()
+
+
+
+
+
 
