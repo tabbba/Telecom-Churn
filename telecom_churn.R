@@ -22,6 +22,7 @@ library(latex2exp)
 library(gridExtra)
 library(tree)
 library(randomForest)
+library(xgboost)
 library(dendextend)
 library(purrr)
 
@@ -111,7 +112,7 @@ ggplot(state.count, aes(area = count, fill = count, label = glue("{State}\n{coun
     plot.background = element_rect(fill = "#f6fff8")
   ) +
   scale_fill_viridis_c()
- 
+
 # univariate analysis for numerical variables
 ### KDE plots
 continuous <- data[, sapply(data, is.numeric) | names(data) == "Churn"]
@@ -493,12 +494,12 @@ ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
   scale_y_continuous(labels = scales::percent_format()) +  # Convert y-axis into percentage format
   theme_minimal() +  # Use a minimal theme
   geom_hline(yintercept = 0.5, colour = "red", linetype = "dashed")
-  theme(
-    plot.title = element_text(hjust = 0.5), 
-    axis.text.x = element_text(angle = 45, hjust = 1), 
-    axis.title.x = element_text(face = "bold"),  
-    axis.title.y = element_text(face = "bold")  
-  )
+theme(
+  plot.title = element_text(hjust = 0.5), 
+  axis.text.x = element_text(angle = 45, hjust = 1), 
+  axis.title.x = element_text(face = "bold"),  
+  axis.title.y = element_text(face = "bold")  
+)
 
 # since we are dealing with an imbalanced dataset we undersample the majority class (no churn) to balance the dataset.
 set.seed(1)
@@ -636,39 +637,29 @@ ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = FALSE)
 data.train <- data[ids.train,]
 data.val <- data[-ids.train,] 
 
+# Oversampling minority class
+data.train.balanced <- ovun.sample(Churn ~ ., data = data.train, method = "over", N=4260)$data
+table(data.train.balanced$Churn)
+
 # SCALING
 cols_to_scale <- c("Account.length", "Area.code", "Number.vmail.messages", "Total.day.calls", "Total.day.charge", "Total.eve.calls", "Total.eve.charge", "Total.night.calls", "Total.night.charge", "Total.intl.calls", "Total.intl.charge", "Customer.service.calls")
 
-train.mean <- apply(data.train[, cols_to_scale], MARGIN = 2, FUN = mean)
-train.sd <- apply(data.train[, cols_to_scale], MARGIN = 2, FUN = sd)
+train.mean <- apply(data.train.balanced[, cols_to_scale], MARGIN = 2, FUN = mean)
+train.sd <- apply(data.train.balanced[, cols_to_scale], MARGIN = 2, FUN = sd)
 
-data.train[, cols_to_scale] <- scale(data.train[, cols_to_scale], center = train.mean, scale = train.sd)
+data.train.balanced[, cols_to_scale] <- scale(data.train.balanced[, cols_to_scale], center = train.mean, scale = train.sd)
 # Scale validation data using training data's parameters
 data.val[, cols_to_scale] <- scale(data.val[, cols_to_scale], center = train.mean, scale = train.sd)
 
 # Baseline Logistic Regression Model
-logistic.baseline <- glm(Churn ~ ., data = data.train, family = "binomial")
+logistic.baseline <- glm(Churn ~ ., data = data.train.balanced, family = "binomial")
 summary(logistic.baseline)
-par(mfrow = c(2,2))
-plot(logistic.baseline)
-vif(logistic.baseline) # all good
+baseline.pred <- ifelse(predict(logistic.baseline, newdata = data.val) > 0.5, 1, 0)
+(baseline.cm <- table(baseline.pred, data.val$Churn))
 
-# Stepwise Model Selection
-# Akaike Information Criterion
-akaike.fw <- step(glm(Churn ~ 1, family = "binomial", data = data.train), scope = formula(logistic.baseline), direction = "forward")
-akaike.back <- step(logistic.baseline, direction = "backward")
-akaike.both <- step(logistic.baseline, direction = "both")
-
-# Bayesian Information criterion
-bayesian.fw <- step(glm(Churn ~ 1, family = "binomial", data = data.train), scope = formula(logistic.baseline), direction = "forward", k = log(nrow(data.train)))
-bayesian.back <- step(logistic.baseline, direction = "backward", k = log(nrow(data.train)))
-bayesian.both <- step(logistic.baseline, direction = "both", k = log(nrow(data.train)))
-
-# Considering bidirectional elimination of both methods, BIC is more strict as it removes all the covariates representing the regions 
-
-get.metrics = function(conf.mat) {
-  true.positives <- conf.mat[1,1]
-  true.negatives <- conf.mat[2,2]
+get.metrics<- function(conf.mat) {
+  true.positives <- conf.mat[2,2]
+  true.negatives <- conf.mat[1,1]
   false.positives <- conf.mat[1,2]
   false.negatives <- conf.mat[2,1]
   num.observations <- true.positives + true.negatives + false.positives + false.negatives
@@ -685,28 +676,37 @@ get.metrics = function(conf.mat) {
   return(metrics)
 }
 
-# Validation set results
-akaike.mat <- confusion.mat(data.val, akaike.both, "Churn", 0.5)
-akaike.metrics <- get.metrics(akaike.mat)
-akaike.metrics
+(baseline.metrics <- get.metrics(baseline.cm))
 
-bayesian.mat <- confusion.mat(data.val, bayesian.both, "Churn", 0.5)
-bayesian.metrics <- get.metrics(bayesian.mat)
-bayesian.metrics
+# Stepwise Model Selection
+# Akaike Information Criterion
+akaike.fw <- step(glm(Churn ~ 1, family = "binomial", data = data.train.balanced), scope = formula(logistic.baseline), direction = "forward")
+akaike.back <- step(logistic.baseline, direction = "backward")
+akaike.both <- step(logistic.baseline, direction = "both")
+
+# Bayesian Information criterion
+bayesian.fw <- step(glm(Churn ~ 1, family = "binomial", data = data.train.balanced), scope = formula(logistic.baseline), direction = "forward", k = log(nrow(data.train.balanced)))
+bayesian.back <- step(logistic.baseline, direction = "backward", k = log(nrow(data.train.balanced)))
+bayesian.both <- step(logistic.baseline, direction = "both", k = log(nrow(data.train.balanced)))
+
+# Considering bidirectional elimination of both methods, BIC is more strict as it removes all the covariates representing the regions 
+
+# Validation set results
+akaike.preds <- ifelse(predict(akaike.both, data.val) > 0.5, 1, 0)
+(akaike.cm <- table(akaike.preds, data.val$Churn))
+(akaike.metrics <- get.metrics(akaike.cm))
+
+bayesian.preds <- ifelse(predict(bayesian.both, data.val) > 0.5, 1, 0)
+(bayesian.cm <- table(bayesian.preds, data.val$Churn))
+(bayesian.metrics <- get.metrics(bayesian.cm))
 
 # Slightly better results with akaike, maybe dropping all the region features as BIC does is too big of a loss of informations
-
-# full logistic model
-full.mat <- confusion.mat(data.val, logistic.baseline, "Churn", 0.5)
-full.metrics <- get.metrics(full.mat)
-full.metrics
-
 
 # ROC curves
 
 par(mfrow = c(2, 2))
 
-roc_full <- roc(data.val$Churn, predict(logistic.baseline, newdata = data.val, type = "response"), 
+roc_full <- roc(data.val$Churn, as.numeric(baseline.pred), 
                 plot = TRUE, main = "ROC Curve Full Model", col = "purple", lwd = 3, 
                 auc.polygon = TRUE, print.auc = TRUE)
 
@@ -723,7 +723,7 @@ par(mfrow = c(1, 1))
 # AUC values
 auc_akaike <- as.numeric(auc(roc(data.val$Churn, predict(akaike.both, newdata = data.val, type = "response"))))
 auc_bayesian <- as.numeric(auc(roc(data.val$Churn, predict(bayesian.both, newdata = data.val, type = "response"))))
-auc_full <- as.numeric(auc(roc(data.val$Churn, predict(logistic.baseline, newdata = data.val, type = "response"))))
+auc_full <- as.numeric(auc(roc(data.val$Churn, baseline.pred)))
 
 
 
@@ -743,23 +743,25 @@ bayesian_df <- data.frame(Model = "Bayesian",
                           AUC = auc_bayesian)
 
 full_df <- data.frame(Model = "Full Logistic",
-                      Accuracy = full.metrics$Accuracy,
-                      Precision = full.metrics$Precision,
-                      Recall = full.metrics$Recall,
-                      F1_Score = full.metrics$F1,
+                      Accuracy = baseline.metrics$Accuracy,
+                      Precision = baseline.metrics$Precision,
+                      Recall = baseline.metrics$Recall,
+                      F1_Score = baseline.metrics$F1,
                       AUC = auc_full)
 
 comparison_df <- bind_rows(akaike_df, bayesian_df, full_df)
 comparison_df
 
-
-
 # LASSO
 set.seed(1)
 ctrl <- trainControl(method = "cv", number = 10)
-lasso <- train(Churn ~ ., data = data.train, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
+lasso <- train(Churn ~ ., data = data.train.balanced, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
 max(lasso$results$Accuracy)
 lasso$bestTune
+
+lasso.predict <- predict(lasso, data.val)
+lasso.cm <- table(lasso.predict, data.val$Churn)
+lasso.metrics <- get.metrics(lasso.cm)
 
 lasso.plot <- lasso %>% 
   ggplot(aes(x = lambda, y = Accuracy)) + 
@@ -775,7 +777,7 @@ lasso.plot <- lasso %>%
 
 #RIDGE
 set.seed(1)
-ridge <- train(Churn ~ ., data = data.train, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
+ridge <- train(Churn ~ ., data = data.train.balanced, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
 max(ridge$results$Accuracy)
 ridge$bestTune
 
@@ -790,69 +792,194 @@ ridge.plot <- ridge %>%
     plot.title = element_text(hjust = 0.5, face = "bold")
   )
 
+ridge.predict <- predict(ridge, data.val)
+ridge.cm <- table(ridge.predict, data.val$Churn)
+ridge.metrics <- get.metrics(ridge.cm)
+
+par(mfrow = c(1,2))
+
+auc.lasso <- roc(data.val$Churn, as.numeric(lasso.predict), 
+                 plot = TRUE, main = "ROC Curve Lasso Model", col = "purple", lwd = 3, 
+                 auc.polygon = TRUE, print.auc = TRUE)
+
+auc.ridge <- roc(data.val$Churn, as.numeric(ridge.predict), 
+                 plot = TRUE, main = "ROC Curve Ridge Model", col = "black", lwd = 3, 
+                 auc.polygon = TRUE, print.auc = TRUE)
+
 grid.arrange(lasso.plot, ridge.plot, top = "Penalized Approaches for Logistic Regression")
+
+lasso_df <- data.frame(Model = "Logistic Lasso",
+                       Accuracy = lasso.metrics$Accuracy,
+                       Precision = lasso.metrics$Precision,
+                       Recall = lasso.metrics$Recall,
+                       F1_Score = lasso.metrics$F1,
+                       AUC = as.numeric(auc.lasso$auc))
+
+ridge_df <- data.frame(Model = "Logistic Ridge",
+                       Accuracy = ridge.metrics$Accuracy,
+                       Precision = ridge.metrics$Precision,
+                       Recall = ridge.metrics$Recall,
+                       F1_Score = ridge.metrics$F1,
+                       AUC = as.numeric(auc.ridge$auc))
+
+comparison_df <- rbind(comparison_df, ridge_df, lasso_df)
+comparison_df
 
 # The difference between the two in terms of accuracy is negligible. Ridge attains a higher lambda value in its best accuracy score.
 
 # Decision Trees
+# Split again to undo the scaling and make trees more interpretable for us
+set.seed(1)
+ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = FALSE)
+data.train <- data[ids.train,]
+data.val <- data[-ids.train,] 
+
+# Oversampling minority class
+data.train.balanced <- ovun.sample(Churn ~ ., data = data.train, method = "over", N=4260)$data
+table(data.train.balanced$Churn)
+
 set.seed(1) # otherwise results might be inconsistent due to ties
-tree.full <- tree(Churn ~ ., data = data.train)
+tree.full <- tree(Churn ~ ., data = data.train.balanced)
 plot(tree.full)
-text(tree.full, pretty = 0)
+text(tree.full, pretty = 0, cex = 0.7)
 
 summary(tree.full)
 tree.pred <- predict(tree.full, data.val, type = "class")
 table(tree.pred, data.val$Churn)
+get.metrics(table(tree.pred, data.val$Churn))
 
+# Pruning Decision Trees with Cross Validation
 cv.trees <- cv.tree(tree.full, FUN = prune.misclass)
-optimal.size <- cv.trees$size[which.min(cv.trees$dev)]
+(optimal.size <- cv.trees$size[which.min(cv.trees$dev)])
+par(mfrow = c(1,2))
+plot(cv.trees$size, cv.trees$dev/nrow(data.val), type = "b", xlab = "Size", ylab = "Error")
+plot(cv.trees$k, cv.trees$dev/nrow(data.val), type = "b", col = 3, xlab = "K", ylab = "Error")
 
-pruned.tree <- prune.misclass(tree.full, best = optimal.size)
-summary(pruned.tree)
-tree.pred <- predict(pruned.tree, data.val, type = "class")
-table(tree.pred, data.val$Churn)
+pruned.tree <- prune.misclass(tree.full, k = 0, best = optimal.size)
+pruned.tree
+plot(pruned.tree)
+text(pruned.tree, pretty = 0, cex = 0.7)
 
-compute_errors <- function(data, size) {
-  if (size == 1) {
-    # Assume majority class prediction for size 1 trees (Cannot use the predict function)
-    major_class <- names(which.max(table(data.train$Churn)))
-    return(sum(data$Churn != major_class) / nrow(data))
-  } else {
-    pruned_tree <- prune.tree(tree.full, best = size)
-    pred <- predict(pruned_tree, data, type = "class")
-    return(sum(data$Churn != pred) / nrow(data))
-  }
-}
+pruned.pred <- predict(pruned.tree, data.val, type = "class")
+table(pruned.pred, data.val$Churn)
+trees.metrics <- get.metrics(table(pruned.pred, data.val$Churn))
+trees.auc <- roc(data.val$Churn, as.numeric(pruned.pred))
 
-training_errors <- sapply(cv.trees$size, compute_errors, data = data.train)
-validation_errors <- sapply(cv.trees$size, compute_errors, data = data.val)
+cv_trees_df <- data.frame(Model = "CV Decision Trees",
+                          Accuracy = trees.metrics$Accuracy,
+                          Precision = trees.metrics$Precision,
+                          Recall = trees.metrics$Recall,
+                          F1_Score = trees.metrics$F1,
+                          AUC = as.numeric(trees.auc$auc))
 
-data_plot <- data.frame(
-  Size = rep(cv.trees$size, 2),  # repeat sizes twice, once for each dataset
-  Error = c(training_errors, validation_errors),  # concatenate error values
-  Dataset = rep(c("Training", "Validation"), each = length(cv.trees$size))  # repeat labels
-)
-
-ggplot(data_plot, aes(x = Size, y = Error, color = Dataset, group = Dataset)) +
-  geom_line() + 
-  geom_point() +  
-  labs(title = "Error by Tree Size", x = "Tree Size", y = "Error Rate") +
-  scale_color_manual(values = c("#264653", "#e76f51"), labels = c("Training Set", "Validation Set")) +
-  theme_minimal() +
-  theme(
-    legend.position = "top",
-    plot.title = element_text(hjust = 0.5, face = "bold")
-)
-
+comparison_df <- rbind(comparison_df, cv_trees_df)
+comparison_df
 
 # Random Forests
 set.seed(1)
-rf.fit <- randomForest(Churn ~ .,data.train)
-plot(rf.fit)
+fit.bag <- randomForest(Churn ~ ., data = data.train.balanced, mtry = ncol(data.train.balanced) - 1, ntree = 500, importance = T) 
+importance(fit.bag)
 
-# Results might look odd but they make sense: the validation set starts with a lower error rate because it contains fewer data points and the distribution of the target is still highly unbalanced. At the start with a tree of size 1 it predicts the majority class and since only 13.7% of the validation set has a churn equal to True, this is enough to obtain an extremely low error from the beginning.    
-  
+layout(matrix(c(1,2),nrow=1),
+       width=c(4,1)) 
+par(mar=c(5,4,4,0)) # No margin right side
+plot(fit.bag, log="y")
+par(mar=c(5,0,4,2)) # No margin left side
+plot(c(0,1),type="n", axes=F, xlab="", ylab="")
+legend("bottom", colnames(fit.bag$err.rate),col=1:4,cex=0.8,fill=1:4)
 
+varImpPlot(fit.bag)
+mean(fit.bag$err.rate[,1]) # OOB test error estimation
+
+validation.preds <- predict(fit.bag, newdata = data.val)
+(bag.missclassification <- mean(validation.preds != data.val$Churn)) # True test error estimation
+# If we used more trees the OOB test error estimation would have been closer to the true test error
+table(validation.preds, data.val$Churn)
+rf.metrics <- get.metrics(table(validation.preds, data.val$Churn))
+rf.auc <- roc(data.val$Churn, as.numeric(validation.preds))
+
+rf_df <- data.frame(Model = "Random Forests",
+                    Accuracy = rf.metrics$Accuracy,
+                    Precision = rf.metrics$Precision,
+                    Recall = rf.metrics$Recall,
+                    F1_Score = rf.metrics$F1,
+                    AUC = as.numeric(rf.auc$auc))
+
+comparison_df <- rbind(comparison_df, rf_df)
+comparison_df
+
+# XGBOOST
+X.tr <- model.matrix(Churn ~ ., data = data.train.balanced)[, -1]
+y.tr <- as.numeric(data.train.balanced$Churn)-1
+X.val <- model.matrix(Churn ~ ., data = data.val)[, -1]
+y.val <- as.numeric(data.val$Churn)-1
+
+fit.xg <- xgboost(as.matrix(X.tr), label = y.tr, nrounds = 50, objective = "binary:logistic", eval_metric = "error")
+xg.pred <- ifelse(predict(fit.xg, X.val)> 0.5, 1, 0)
+mean(xg.pred != y.val)
+
+table(xg.pred, data.val$Churn)
+get.metrics(table(xg.pred, data.val$Churn))
+
+train.errors <- fit.xg$evaluation_log$train_error
+val.errors <- numeric(50)
+
+for (i in 1:50) {
+  pred_i = ifelse(predict(fit.xg, X.val, ntreelimit = i) > 0.5, 1, 0)
+  val.errors[i] = mean(pred_i != y.val)
+} 
+
+plot(1:50, val.errors, type="b", xlab="number of trees", ylab="error", col=3, ylim = c(0,0.3))
+points(1:50, train.errors, type="b")
+legend("topright", legend = c("Train", "Test"), col=c(1, 3), lty=1, lwd=2, cex = 1)
+which.min(val.errors)
+abline(v = which.min(val.errors))
+
+(feature.importance <- xgb.importance(model = fit.xg))
+xgb.plot.importance(importance_matrix = feature.importance)
+
+fitControl = trainControl(
+  method = "cv",
+  number = 10, 
+  search="random")
+
+
+tune_grid = 
+  expand.grid(
+    nrounds = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+    eta = 0.3,
+    max_depth=5,
+    subsample = 1,
+    colsample_bytree = 1,
+    min_child_weight = 5,
+    gamma = c(0.1, 0.2, 0.5, 0.75, 1)
+  )
+
+set.seed(1)
+fit_xg_cv = train(Churn ~ ., data = data.train.balanced, 
+                  method = "xgbTree", 
+                  trControl = fitControl,
+                  verbose = FALSE, 
+                  tuneGrid = tune_grid,
+                  objective = "binary:logistic", 
+                  eval_metric = "error")
+
+pred_xg_cv = predict(fit_xg_cv, data.val, type="raw")
+mean(pred_xg_cv != data.val$Churn)
+table(pred_xg_cv, data.val$Churn)
+xgb.metrics <- get.metrics(table(pred_xg_cv, data.val$Churn))
+
+auc.xgb <- roc(data.val$Churn, as.numeric(pred_xg_cv))
+
+xgb_df <- data.frame(Model = "CV XGB",
+                     Accuracy = xgb.metrics$Accuracy,
+                     Precision = xgb.metrics$Precision,
+                     Recall = xgb.metrics$Recall,
+                     F1_Score = xgb.metrics$F1,
+                     AUC = as.numeric(auc.xgb$auc))
+
+comparison_df <- rbind(comparison_df, xgb_df)
+comparison_df
 
 # CLUSTERING PRIMA BOZZA
 # preparing data
@@ -993,6 +1120,3 @@ kmeans_pca_hc
 
 silhouette_pca_hc <- silhouette(kmeans_pca_hc$cluster, dist(pca_hc$x[, 1:10]))
 mean(silhouette_pca_hc[, 3]) 
-
-
-
