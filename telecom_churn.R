@@ -22,6 +22,8 @@ library(latex2exp)
 library(gridExtra)
 library(tree)
 library(randomForest)
+library(dendextend)
+library(purrr)
 
 data = read.csv("TelecomChurn.csv")
 
@@ -851,10 +853,6 @@ plot(rf.fit)
 # Results might look odd but they make sense: the validation set starts with a lower error rate because it contains fewer data points and the distribution of the target is still highly unbalanced. At the start with a tree of size 1 it predicts the majority class and since only 13.7% of the validation set has a churn equal to True, this is enough to obtain an extremely low error from the beginning.    
   
 
-# CLUSTERING PRIMA BOZZA
-# preparing data
-
-
 
 # CLUSTERING PRIMA BOZZA
 # preparing data
@@ -929,6 +927,72 @@ fviz_cluster(kmeans_pca, data = pca$x[, 1:7], geom = "point", stand = FALSE, ell
   labs(title = "K-means Clustering with PCA") +
   theme_minimal()
 
+
+
+
+
+
+
+
+
+# HIERARCHICAL CLUSTERING
+# Finding distance matrix
+distance_mat <- dist(clustering_data, method = 'euclidean')
+distance_mat
+
+# Fitting Hierarchical clustering Model 
+set.seed(240)  
+Hierar_cl <- hclust(distance_mat, method = "average")
+Hierar_cl
+
+plot(Hierar_cl)
+
+# Compute with agnes
+
+# methods to assess which method between avg, single, complete, ward is the best
+m <- c( "average", "single", "complete", "ward")
+names(m) <- c( "average", "single", "complete", "ward")
+
+# function to compute coefficient
+ac <- function(x) {
+  agnes(clustering_data, method = x)$ac
+}
+
+map_dbl(m, ac)
+map_dbl
+# ward is the best method 0.97
+
+hc3 <- agnes(clustering_data, method = "ward")
+pltree(hc3, cex = 0.6, hang = -1, main = "Dendrogram") 
+
+# fitting the model and cutting the tree at 2
+sub_grp <- cutree(hc3, k = 2)
+table(sub_grp)
+
+# visualizing the clusters
+fviz_cluster(list(data = clustering_data, cluster = sub_grp)) +
+  labs(title = "Hierarchical Clustering") +
+  theme_minimal()
+
+# silhouette
+silhouette_hc <- silhouette(sub_grp, dist(clustering_data))
+mean(silhouette_hc[, 3])
+
+# pca
+pca_hc <- prcomp(clustering_data, scale = TRUE)
+summary(pca_hc)
+
+# 10 components to have 0.79 cumulative variance
+fviz_pca_var(pca_hc, col.var = "contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE) +
+  theme_minimal()
+
+# hier with pca
+set.seed(123)
+kmeans_pca_hc <- kmeans(pca_hc$x[, 1:10], centers = 2, nstart = 25)
+kmeans_pca_hc
+
+silhouette_pca_hc <- silhouette(kmeans_pca_hc$cluster, dist(pca_hc$x[, 1:10]))
+mean(silhouette_pca_hc[, 3]) 
 
 
 
