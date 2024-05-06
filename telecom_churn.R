@@ -842,6 +842,7 @@ ggplot(data_plot, aes(x = Size, y = Error, color = Dataset, group = Dataset)) +
     plot.title = element_text(hjust = 0.5, face = "bold")
 )
 
+
 # Random Forests
 set.seed(1)
 rf.fit <- randomForest(Churn ~ .,data.train)
@@ -853,20 +854,17 @@ plot(rf.fit)
 # CLUSTERING PRIMA BOZZA
 # preparing data
 
+
+
+# CLUSTERING PRIMA BOZZA
+# preparing data
+
 clustering_data <- read.csv("TelecomChurn.csv")
 
 clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Churn", "State"))]
 
 # let s drop all the minutes one
 clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.minutes", "Total.eve.minutes", "Total.night.minutes", "Total.intl.minutes"))]
-
-# Creating new features
-clustering_data$Total.call.charge <- clustering_data$Total.day.charge + clustering_data$Total.eve.charge + clustering_data$Total.night.charge + clustering_data$Total.intl.charge
-clustering_data$Total.calls <- clustering_data$Total.day.calls + clustering_data$Total.eve.calls + clustering_data$Total.night.calls + clustering_data$Total.intl.calls
-
-# drop them
-clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.charge", "Total.eve.charge", "Total.night.charge", "Total.intl.charge"))]
-clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.calls", "Total.eve.calls", "Total.night.calls", "Total.intl.calls"))]
 
 numerical_vars <- sapply(clustering_data, is.numeric)
 clustering_data[numerical_vars] <- scale(clustering_data[numerical_vars])
@@ -889,6 +887,7 @@ fviz_nbclust(clustering_data, kmeans, method = "wss") +
 fviz_nbclust(clustering_data, kmeans, method = "silhouette") +
   labs(subtitle = "Silhouette method")
 
+
 # K-means clustering
 set.seed(123)
 kmeans_model <- kmeans(clustering_data, centers = 2, nstart = 25)
@@ -907,7 +906,28 @@ fviz_cluster(kmeans_model, data = clustering_data, geom = "point", stand = FALSE
   labs(title = "K-means Clustering") +
   theme_minimal()
 
+# pca
+pca <- prcomp(clustering_data, scale = TRUE)
+summary(pca)
 
+plot(pca, type = "l")
+abline(h = 1, col = "red", lty = 2) # it suggests 7 
+
+fviz_pca_var(pca, col.var = "contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE) +
+  theme_minimal()
+
+# k-means with pca
+set.seed(123)
+kmeans_pca <- kmeans(pca$x[, 1:7], centers = 2, nstart = 25)
+kmeans_pca
+
+silhouette_pca <- silhouette(kmeans_pca$cluster, dist(pca$x[, 1:7]))
+mean(silhouette_pca[, 3])
+
+# visualization
+fviz_cluster(kmeans_pca, data = pca$x[, 1:7], geom = "point", stand = FALSE, ellipse.type = "convex") +
+  labs(title = "K-means Clustering with PCA") +
+  theme_minimal()
 
 
 
