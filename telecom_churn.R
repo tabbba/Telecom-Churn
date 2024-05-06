@@ -20,6 +20,8 @@ library(factoextra)
 library(sf)
 library(latex2exp)
 library(gridExtra)
+library(tree)
+library(randomForest)
 
 data = read.csv("TelecomChurn.csv")
 
@@ -586,6 +588,7 @@ map_region <- function(state) {
 }
 
 data$Region <- sapply(data$State, map_region)
+data$Region <- as.factor(data$Region)
 
 # we'll use the regions column for the first models to avoid having high-cardinality encoded columns.
 # we store the variable in order to use it later with more robust models (tree-based).
@@ -789,8 +792,63 @@ grid.arrange(lasso.plot, ridge.plot, top = "Penalized Approaches for Logistic Re
 
 # The difference between the two in terms of accuracy is negligible. Ridge attains a higher lambda value in its best accuracy score.
 
-# CLUSTERING PRIMA BOZZA
+# Decision Trees
+set.seed(1) # otherwise results might be inconsistent due to ties
+tree.full <- tree(Churn ~ ., data = data.train)
+plot(tree.full)
+text(tree.full, pretty = 0)
 
+summary(tree.full)
+tree.pred <- predict(tree.full, data.val, type = "class")
+table(tree.pred, data.val$Churn)
+
+cv.trees <- cv.tree(tree.full, FUN = prune.misclass)
+optimal.size <- cv.trees$size[which.min(cv.trees$dev)]
+
+pruned.tree <- prune.misclass(tree.full, best = optimal.size)
+summary(pruned.tree)
+tree.pred <- predict(pruned.tree, data.val, type = "class")
+table(tree.pred, data.val$Churn)
+
+compute_errors <- function(data, size) {
+  if (size == 1) {
+    # Assume majority class prediction for size 1 trees (Cannot use the predict function)
+    major_class <- names(which.max(table(data.train$Churn)))
+    return(sum(data$Churn != major_class) / nrow(data))
+  } else {
+    pruned_tree <- prune.tree(tree.full, best = size)
+    pred <- predict(pruned_tree, data, type = "class")
+    return(sum(data$Churn != pred) / nrow(data))
+  }
+}
+
+training_errors <- sapply(cv.trees$size, compute_errors, data = data.train)
+validation_errors <- sapply(cv.trees$size, compute_errors, data = data.val)
+
+data_plot <- data.frame(
+  Size = rep(cv.trees$size, 2),  # repeat sizes twice, once for each dataset
+  Error = c(training_errors, validation_errors),  # concatenate error values
+  Dataset = rep(c("Training", "Validation"), each = length(cv.trees$size))  # repeat labels
+)
+
+ggplot(data_plot, aes(x = Size, y = Error, color = Dataset, group = Dataset)) +
+  geom_line() + 
+  geom_point() +  
+  labs(title = "Error by Tree Size", x = "Tree Size", y = "Error Rate") +
+  scale_color_manual(values = c("#264653", "#e76f51"), labels = c("Training Set", "Validation Set")) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, face = "bold")
+)
+
+# Random Forests
+set.seed(1)
+rf.fit <- randomForest(Churn ~ .,data.train)
+plot(rf.fit)
+
+# Results might look odd but they make sense: the validation set starts with a lower error rate because it contains fewer data points and the distribution of the target is still highly unbalanced. At the start with a tree of size 1 it predicts the majority class and since only 13.7% of the validation set has a churn equal to True, this is enough to obtain an extremely low error from the beginning.    
+  
 
 # CLUSTERING PRIMA BOZZA
 # preparing data
