@@ -25,6 +25,8 @@ library(randomForest)
 library(xgboost)
 library(dendextend)
 library(purrr)
+library(ROSE)
+
 
 data = read.csv("TelecomChurn.csv")
 
@@ -988,8 +990,18 @@ clustering_data <- read.csv("TelecomChurn.csv")
 
 clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Churn", "State"))]
 
-# let s drop all the minutes one
+# create a variable total_minute
+clustering_data$Total.minutes <- clustering_data$Total.day.minutes + clustering_data$Total.eve.minutes + clustering_data$Total.night.minutes + clustering_data$Total.intl.minutes
 clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.minutes", "Total.eve.minutes", "Total.night.minutes", "Total.intl.minutes"))]
+
+# total_charge
+clustering_data$Total.charge <- clustering_data$Total.day.charge + clustering_data$Total.eve.charge + clustering_data$Total.night.charge + clustering_data$Total.intl.charge
+clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.charge", "Total.eve.charge", "Total.night.charge", "Total.intl.charge"))]
+
+# total call
+clustering_data$Total.calls <- clustering_data$Total.day.calls + clustering_data$Total.eve.calls + clustering_data$Total.night.calls + clustering_data$Total.intl.calls
+clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.calls", "Total.eve.calls", "Total.night.calls", "Total.intl.calls"))]
+
 
 numerical_vars <- sapply(clustering_data, is.numeric)
 clustering_data[numerical_vars] <- scale(clustering_data[numerical_vars])
@@ -1015,7 +1027,7 @@ fviz_nbclust(clustering_data, kmeans, method = "silhouette") +
 
 # K-means clustering
 set.seed(123)
-kmeans_model <- kmeans(clustering_data, centers = 2, nstart = 25)
+kmeans_model <- kmeans(clustering_data, centers = 4, nstart = 25)
 kmeans_model
 
 # silhouette results
@@ -1036,21 +1048,21 @@ pca <- prcomp(clustering_data, scale = TRUE)
 summary(pca)
 
 plot(pca, type = "l")
-abline(h = 1, col = "red", lty = 2) # it suggests 7 
+abline(h = 1, col = "red", lty = 2) 
 
 fviz_pca_var(pca, col.var = "contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE) +
   theme_minimal()
 
 # k-means with pca
 set.seed(123)
-kmeans_pca <- kmeans(pca$x[, 1:7], centers = 2, nstart = 25)
+kmeans_pca <- kmeans(pca$x[, 1:5], centers = 2, nstart = 25)
 kmeans_pca
 
-silhouette_pca <- silhouette(kmeans_pca$cluster, dist(pca$x[, 1:7]))
+silhouette_pca <- silhouette(kmeans_pca$cluster, dist(pca$x[, 1:5]))
 mean(silhouette_pca[, 3])
 
 # visualization
-fviz_cluster(kmeans_pca, data = pca$x[, 1:7], geom = "point", stand = FALSE, ellipse.type = "convex") +
+fviz_cluster(kmeans_pca, data = pca$x[, 1:5], geom = "point", stand = FALSE, ellipse.type = "convex") +
   labs(title = "K-means Clustering with PCA") +
   theme_minimal()
 
@@ -1059,8 +1071,7 @@ fviz_cluster(kmeans_pca, data = pca$x[, 1:7], geom = "point", stand = FALSE, ell
 
 
 
-
-
+?hclust
 
 # HIERARCHICAL CLUSTERING
 # Finding distance matrix
@@ -1069,7 +1080,7 @@ distance_mat
 
 # Fitting Hierarchical clustering Model 
 set.seed(240)  
-Hierar_cl <- hclust(distance_mat, method = "average")
+Hierar_cl <- hclust(distance_mat, method = "ward")
 Hierar_cl
 
 plot(Hierar_cl)
@@ -1077,23 +1088,23 @@ plot(Hierar_cl)
 # Compute with agnes
 
 # methods to assess which method between avg, single, complete, ward is the best
-m <- c( "average", "single", "complete", "ward")
-names(m) <- c( "average", "single", "complete", "ward")
+# m <- c( "average", "single", "complete", "ward")
+# names(m) <- c( "average", "single", "complete", "ward")
 
 # function to compute coefficient
-ac <- function(x) {
-  agnes(clustering_data, method = x)$ac
-}
+# ac <- function(x) {
+#  agnes(clustering_data, method = x)$ac
+# }
 
-map_dbl(m, ac)
-map_dbl
+# map_dbl(m, ac)
+
 # ward is the best method 0.97
 
-hc3 <- agnes(clustering_data, method = "ward")
-pltree(hc3, cex = 0.6, hang = -1, main = "Dendrogram") 
+# hc3 <- agnes(clustering_data, method = "ward")
+# pltree(hc3, cex = 0.6, hang = -1, main = "Dendrogram") 
 
 # fitting the model and cutting the tree at 2
-sub_grp <- cutree(hc3, k = 2)
+sub_grp <- cutree(Hierar_cl, k = 4)
 table(sub_grp)
 
 # visualizing the clusters
@@ -1109,14 +1120,14 @@ mean(silhouette_hc[, 3])
 pca_hc <- prcomp(clustering_data, scale = TRUE)
 summary(pca_hc)
 
-# 10 components to have 0.79 cumulative variance
+#  6 components to have 0.88 cum var
 fviz_pca_var(pca_hc, col.var = "contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE) +
   theme_minimal()
 
 # hier with pca
 set.seed(123)
-kmeans_pca_hc <- kmeans(pca_hc$x[, 1:10], centers = 2, nstart = 25)
+kmeans_pca_hc <- kmeans(pca_hc$x[, 1:6], centers = 2, nstart = 25)
 kmeans_pca_hc
 
-silhouette_pca_hc <- silhouette(kmeans_pca_hc$cluster, dist(pca_hc$x[, 1:10]))
+silhouette_pca_hc <- silhouette(kmeans_pca_hc$cluster, dist(pca_hc$x[, 1:6]))
 mean(silhouette_pca_hc[, 3]) 
