@@ -1,65 +1,83 @@
 ---
 title: "Data Analysis for Business - Midterm Project"
+author: Edoardo Cocciò, Alexandra Tabarani, Marta Torella, Simone Filosofi
 output:
-  pdf_document: default
   html_document: default
 ---
 
-# Standard Deviated Group {#main .tabset}
+# Standard Deviated Group {.tabset .tabset-fade}
 
 Group members:
 
 -   Edoardo Cocciò - 282401
 -   Alexandra Tabarani - 282091
--   Simone Filosofi - 284531
 -   Marta Torella - 284091
+-   Simone Filosofi - 284531
 
-# Task 1
-
-## Describe your dataset
+## Task 1 {.tabset .tabset-fade}
 
 The dataset we are going to analyze is the "Telecom Churn" dataset, which is a dataset that contains information about a telecommunications company that is trying to understand why its customers are leaving the company. Our role is to build a classification model to help Telecom in targeting the willing-to-churn customers before it is too late.
 
-### EDA
-To begin our Expaloratory Data Analysis, we first  imported the necessary libraries and load the dataset. Immediately after we check the structure of the data to get an overall feeling of the respective types and values.
-```{r}
-str(data)
-```
-We see that the dataset contains 3333 observations and 20 variables. The variables are a mix of numeric and factor variables. The target variable is "Churn" which is a factor variable with two levels: "Yes" and "No". The other variables are a mix of numeric and factor variables. The numeric variables are "Account Length", "VMail Message", "Day Mins", "Day Calls", "Day Charge", "Eve Mins", "Eve Calls", "Eve Charge", "Night Mins", "Night Calls", "Night Charge", "Intl Mins", "Intl Calls", "Intl Charge", "CustServ Calls". The factor variables are "State", "Area Code", "Phone", "Int'l Plan", "VMail Plan".
-```{r}
-summary(data)
-```
-Using the `summary()` function, we obtained a snapshot of the central tendency and dispersion of the numerical features and the distribution of the categorical variables:
-- **Account Length**: 
-- **VMail Message**: 
-- **Day Mins**: 
-- **Day Calls**: 
-- **Day Charge**: 
-- **Eve Mins**: 
-- **Eve Calls**: 
-- **Eve Charge**: 
-- **Night Mins**: 
-- **Night Calls**:                (Non so se sia necessario mettere tutte le summary)
-- **Night Charge**: 
-- **Intl Mins**: 
-- **Intl Calls**: 
-- **Intl Charge**: 
-- **CustServ Calls**: 
-- **State**:
-- **Area Code**:
-- **Phone**:
-- **Int'l Plan**:
-- **VMail Plan**:
 
-### Missing values and duplicates
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(ggplot2)
+library(corrplot)
+library(dplyr)
+library(tidyr)
+library(skimr)
+library(treemapify)
+library(stringr)
+library(glue)
+library(dummy)
+library(caret)
+library(car)
+library(pROC)
+library(glmnet)
+library(rpart)
+library(rpart.plot) 
+library(randomForest)
+library(pROC)
+library(cluster)
+library(factoextra)
+library(sf)
+library(latex2exp)
+library(gridExtra)
+library(tree)
+library(randomForest)
+library(xgboost)
+library(dendextend)
+library(purrr)
+library(ROSE)
+
+data <- read.csv("TelecomChurn.csv")
+```
+
+
+### EDA
+
+```{r}
+names(data)
+
+data$State = as.factor(data$State)
+data$International.plan = as.factor(data$International.plan)
+data$Voice.mail.plan = as.factor(data$Voice.mail.plan)
+data$Churn = as.factor(data$Churn)
+```
+#### Missing values and duplicates
 ```{r}
 sum(is.na(data))
 anyDuplicated(data)
 ```
 We checked for missing values in the dataset and found that there are no missing values in the dataset. We also checked for duplicates and found that there are no duplicates either.
 
-### Univariate analysis for numerical variables
-```{r, echo=FALSE}
+```{r}
+continuous_vars <- data[, sapply(data, is.numeric)]
+categorical_vars <- data[, sapply(data, is.factor) & !names(data) %in% "Churn"]
+```
+
+
+#### Univariate analysis for numerical variables
+```{r, echo=FALSE, fig.align='center', fig.width=10, fig.height=10}
 continuous <- data[, sapply(data, is.numeric) | names(data) == "Churn"]
 
 continuous %>%
@@ -84,12 +102,138 @@ continuous %>%
 The univariate analysis of the numerical variables shows that the distribution of the numerical variables is different for the two levels of the target variable "Churn". 
 Foe example there's a noticeable difference in the distribution of *customer service calls*: customers who churned seem to make more customer service calls, which could indicate a relationship between customer satisfaction and churn. It appears that customers who churned tend to have slightly higher day minutes and charges. This might suggest that customers with higher usage during the day are more likely to churn. Something similar happens with *total.day.charge* also. The distribution of the other variables is not as clear-cut as the ones mentioned above, but there are some differences in the distributions of the variables between the two levels of the target variable.
 
-### Hypothesis testing
+```{r include=FALSE}
+continuous_vars <- data[, sapply(data, is.numeric)]
+categorical_vars <- data[, sapply(data, is.factor) & !names(data) %in% "Churn"]
+```
 
-(...)   ne scegliamo solo uno da mettere come esempio?
+#### Distribution of Target and Categorical Variables
+```{r echo=FALSE, fig.show ="hold", out.width="50%"}
+churn_percent <- data %>%
+  group_by(Churn) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  mutate(Percent = Count / sum(Count) * 100)
 
-### Correlation analysis
-```{r, echo=FALSE}
+ggplot(churn_percent, aes(x = "", y = Percent, fill = Churn)) +
+  geom_col(width = 1, color = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
+  labs(title = "Percentage of Churn", fill = "Churn") +
+  geom_text(aes(label = paste0(round(Percent, 1), "%")), position = position_stack(vjust = 0.5)) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18))
+
+long_data <- categorical_vars %>%
+  pivot_longer(cols = c("International.plan", "Voice.mail.plan"), names_to = "Category", values_to = "Value")
+
+ggplot(long_data, aes(x = Value, fill = Value)) +
+  geom_bar(color = "black") +
+  facet_wrap(~ Category, scales = "free_x", nrow = 2, ncol = 2) +
+  labs(title = "Distribution of Categorical Variables", x = NULL, y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("No" = "#ffe8cc", "Yes" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
+  theme(
+    strip.text = element_text(size = 12),
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    legend.position = "none"
+  ) 
+
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+us_map <- map_data("state") %>% 
+  as_tibble()
+
+us_map %>%
+  ggplot(aes(long, lat, map_id = region)) + 
+  geom_map(
+    map =us_map,
+    color = "gray80",
+    fill = "gray30",
+    size = 0.3
+  ) + 
+  coord_map("ortho", orientation = c(39, -98, 0)) + 
+  labs(
+    title = "US Map",
+    subtitle = "Based on Latitude and Longitude"
+  ) + theme(plot.title = element_text(hjust=0.5))
+```
+
+
+```{r echo=FALSE, fig.align="center", fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
+state_names <- c(KS = "kansas", OH = "ohio", NJ = "new jersey", OK = "oklahoma",
+                 AL = "alabama", MA = "massachusetts", MO = "missouri", LA = "louisiana",
+                 WV = "west virginia", IN = "indiana", RI = "rhode island", IA = "iowa",
+                 MT = "montana", NY = "new york", ID = "idaho", VT = "vermont",
+                 VA = "virginia", TX = "texas", FL = "florida", CO = "colorado",
+                 AZ = "arizona", SC = "south carolina", NE = "nebraska", WY = "wyoming",
+                 HI = "hawaii", IL = "illinois", NH = "new hampshire", GA = "georgia",
+                 AK = "alaska", MD = "maryland", AR = "arkansas", WI = "wisconsin",
+                 OR = "oregon", MI = "michigan", DE = "delaware", UT = "utah",
+                 CA = "california", MN = "minnesota", SD = "south dakota", NC = "north carolina",
+                 WA = "washington", NM = "new mexico", NV = "nevada", DC = "district of columbia",
+                 KY = "kentucky", ME = "maine", MS = "mississippi", TN = "tennessee",
+                 PA = "pennsylvania", CT = "connecticut", ND = "north dakota")
+
+churn.tbl <- data %>% select(State, Churn) %>%
+  group_by(State) %>%
+  summarize(
+    total_customers = n(),
+    churned_customers = sum(Churn == "True"),
+    churn_rate = (churned_customers / total_customers),
+    churn_rate_txt = scales::percent(churn_rate)
+  ) %>%
+  mutate(full_state = state_names[as.character(State)]) %>%
+  ungroup() %>% 
+  left_join(us_map, by=c("full_state" = "region"))
+
+us_map_sf <- st_as_sf(us_map, coords = c("long", "lat"), crs = 4326, agr = "constant")
+
+centroids <- us_map_sf %>%
+  group_by(region) %>%
+  summarise(geometry = st_centroid(st_union(geometry)))
+
+centroids_df <- as.data.frame(st_coordinates(centroids))
+centroids_df$region <- centroids$region
+
+churn.tbl <- churn.tbl %>%
+  left_join(centroids_df, by = c("full_state" = "region"))
+
+churn.tbl %>%
+  ggplot(aes(long, lat)) + 
+  geom_map(
+    aes(map_id = full_state),
+    map = us_map,
+    color = "gray86",
+    fill = "gray30",
+    size = 0.3
+  ) + coord_map("ortho", orientation = c(39, -98, 0)) + geom_polygon(aes(group = group, fill = churn_rate), color="black") +
+  scale_fill_gradient2("",low = "#18BC9C", mid = "white", high = "#E31A1C", midpoint = 0.10, labels = scales::percent) + 
+  geom_text(aes(x = X, y = Y, label = State), stat = "unique", size = 3, inherit.aes = FALSE, fontface = "bold") +
+  theme_void() + 
+  theme(
+    plot.title = element_text(size=18, face="bold", color = "#2C3E50"),
+    legend.position = "right"
+  ) + 
+  labs(
+    title = "Churn Rate Across US States",
+    x = "",
+    y = ""
+  ) + 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+  ) 
+```
+
+
+
+#### Hypothesis testing
+
+
+
+#### Correlation analysis
+```{r, echo=FALSE, fig.align='center'}
 cor_mat <-
   data %>% 
   select(where(is.numeric)) %>% 
@@ -102,7 +246,7 @@ corrplot(
   order = "alphabet",
   type = "lower",
   diag = FALSE,
-  number.cex = 0.8,
+  number.cex = 0.6,
   tl.cex = 0.6,
   tl.srt = 45,
   cl.pos = "b",
@@ -118,9 +262,6 @@ The correlation matrix shows that there is a *perfect correlation between the ch
 
 **N.B.** We computed more analysis, using plots and hypothesis testing, to understand the relationship between the variables and the target variable "Churn", but for limited space restrictions we will not show them here. In the next section we will report the main conclusions arising from this analysis.
 
-## Objectives of our Task 1
-Our Task 1 has the purpose to predict whether customers will churn or not. As we previously said in the introduction, this task is useful for the company to take actions to prevent customers from churning. Moreover, it can helps the company to understand the reasons behind the churn and take actions to improve the service and customer satisfaction by offering also promotions to the customers that are more likely to churn.
-
 **CONCLUSION UP TO NOW:**
 - we dropped the *minutes variables* because they are *perfectly correlated with the charge variables*;
 - we saw that the *churn rate* is *higher* for customers that have an *international plan*;
@@ -130,24 +271,13 @@ Our Task 1 has the purpose to predict whether customers will churn or not. As we
 - we saw that the churn rate is *higher* for customers that *have higher total eve charge, night charge, and intl charge*;
 - we saw that *State* also *influences the churn rate*;
 
-## Lower-dimensional models
+### Lower-dimensional models
 Before proceeding with the full model we need to focus on some lower dimensional model in order to investigate some interesting relationships between the variables. 
 We only include customers who have made a service call:
-```{r}
-data <- data %>% filter(Customer.Service.Calls > 0)
-```
 
-(...)
 
-(The p-value for Customer.service.calls (<2e-16) suggests that there is a statistically significant association between the number of customer service calls and an increased likelihood of churn.)
 
-(...)
-
-(Since we are dealing with an imbalanced dataset we undersample the majority class (no churn) to balance the dataset)
-
-(...)
-
-## Preprocessing and feature engineering
+### Preprocessing and feature engineering
 We should first deal with the 51 states: we can group them by region (north, south, east, west). 
 ```{r, echo=FALSE} 
 map_region <- function(state) {
@@ -178,10 +308,7 @@ We'll use the regions column for the first models to avoid having high-cardinali
 state.column <- data$State
 data$State <- NULL
 ```
-Let's see the distribution of churn by region:
-```{r}
-group_plt(Region)
-```
+
 Now let's re-do the chi square:
 ```{r}
 contingency.table <- table(data$Region, data$Churn)
@@ -206,7 +333,7 @@ ggplot(data, aes(x = Region, fill = Churn)) +
 ```
 We can see that the churn rate is not influenced by the region. 
 
-### Splitting the data
+#### Splitting the data
 ```{r}
 set.seed(1)
 ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = FALSE)
@@ -219,17 +346,17 @@ data.train.balanced <- ovun.sample(Churn ~ ., data = data.train, method = "over"
 table(data.train.balanced$Churn)
 ```
 
-###
 
+### Main conclusions
 
+## Task 2 {.tabset}
+Cluster customers according to their behavior
 
-
-## Main conclusions
-
-# Task 2: Cluster customers according to their behavior
-
-# Objectives of our Task 2
+### Feature Engineering
  
+### Kmeans
+
+### Hierarchical Clustering
 
 
 
