@@ -39,7 +39,7 @@ Using the `summary()` function, we obtained a snapshot of the central tendency a
 - **Eve Calls**: 
 - **Eve Charge**: 
 - **Night Mins**: 
-- **Night Calls**: 
+- **Night Calls**:                (Non so se sia necessario mettere tutte le summary)
 - **Night Charge**: 
 - **Intl Mins**: 
 - **Intl Calls**: 
@@ -86,6 +86,7 @@ Foe example there's a noticeable difference in the distribution of *customer ser
 
 ### Hypothesis testing
 
+(...)   ne scegliamo solo uno da mettere come esempio?
 
 ### Correlation analysis
 ```{r, echo=FALSE}
@@ -118,7 +119,7 @@ The correlation matrix shows that there is a *perfect correlation between the ch
 **N.B.** We computed more analysis, using plots and hypothesis testing, to understand the relationship between the variables and the target variable "Churn", but for limited space restrictions we will not show them here. In the next section we will report the main conclusions arising from this analysis.
 
 ## Objectives of our Task 1
-Our Task 1 has the purpose to predict whether customers will churn or not. This task is useful for the company to take actions to prevent customers from churning. Moreover, it can helps the company to understand the reasons behind the churn and take actions to improve the service and customer satisfaction by offering also promotions to the customers that are more likely to churn.
+Our Task 1 has the purpose to predict whether customers will churn or not. As we previously said in the introduction, this task is useful for the company to take actions to prevent customers from churning. Moreover, it can helps the company to understand the reasons behind the churn and take actions to improve the service and customer satisfaction by offering also promotions to the customers that are more likely to churn.
 
 **CONCLUSION UP TO NOW:**
 - we dropped the *minutes variables* because they are *perfectly correlated with the charge variables*;
@@ -128,7 +129,6 @@ Our Task 1 has the purpose to predict whether customers will churn or not. This 
 - we saw that the churn rate is *higher* for customers that *have higher total day minutes and total day charge*;
 - we saw that the churn rate is *higher* for customers that *have higher total eve charge, night charge, and intl charge*;
 - we saw that *State* also *influences the churn rate*;
-
 
 ## Lower-dimensional models
 Before proceeding with the full model we need to focus on some lower dimensional model in order to investigate some interesting relationships between the variables. 
@@ -219,7 +219,7 @@ data.train.balanced <- ovun.sample(Churn ~ ., data = data.train, method = "over"
 table(data.train.balanced$Churn)
 ```
 
-
+###
 
 
 
