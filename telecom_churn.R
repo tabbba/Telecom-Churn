@@ -1233,4 +1233,132 @@ kmeans_pca_hc
 
 silhouette_pca_hc <- silhouette(kmeans_pca_hc$cluster, dist(pca_hc$x[, 1:6]))
 mean(silhouette_pca_hc[, 3]) 
+  ----------------------
+
+# Clustering second attempt
+library(dplyr)
+library(cluster)
+library(factoextra)
+
+## K-means clustering
+#### Convert categorical variables and scale data
+library(dplyr)
+
+clustering_data <- read.csv("TelecomChurn.csv")
+
+# create a variable total_minute
+clustering_data$Total.minutes <- clustering_data$Total.day.minutes + clustering_data$Total.eve.minutes + clustering_data$Total.night.minutes + clustering_data$Total.intl.minutes
+clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.minutes", "Total.eve.minutes", "Total.night.minutes", "Total.intl.minutes"))]
+
+# total_charge
+clustering_data$Total.charge <- clustering_data$Total.day.charge + clustering_data$Total.eve.charge + clustering_data$Total.night.charge + clustering_data$Total.intl.charge
+clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.charge", "Total.eve.charge", "Total.night.charge", "Total.intl.charge"))]
+
+# total call
+clustering_data$Total.calls <- clustering_data$Total.day.calls + clustering_data$Total.eve.calls + clustering_data$Total.night.calls + clustering_data$Total.intl.calls
+clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.calls", "Total.eve.calls", "Total.night.calls", "Total.intl.calls"))]
+
+
+numerical_vars <- sapply(clustering_data, is.numeric)
+clustering_data[numerical_vars] <- scale(clustering_data[numerical_vars])
+
+convert_yes_no <- function(column) {
+  ifelse(column == "Yes", 1, 0)
+}
+
+clustering_data$International.plan <- convert_yes_no(clustering_data$International.plan)
+clustering_data$Voice.mail.plan <- convert_yes_no(clustering_data$Voice.mail.plan)
+
+head(clustering_data)
+
+# Select the specific columns
+data_prepared <- clustering_data %>%
+  select(International.plan, Voice.mail.plan, Number.vmail.messages, Total.minutes, Total.charge, Total.calls)
+head(data_prepared)
+
+# elbow rule plot
+fviz_nbclust(data_prepared, kmeans, method = "wss") +
+  labs(subtitle = "WSS - Elbow method")
+# avg silhouette plot
+fviz_nbclust(data_prepared, kmeans, method = "silhouette") +
+  labs(subtitle = "Silhouette method")
+
+
+#### assuming we decide on 3 clusters since it seams the best choice
+K <- 3
+set.seed(1)  
+km_result <- kmeans(data_prepared, centers = K, nstart = 25, iter.max = 100)
+
+#### plot
+data$cluster <- km_result$cluster
+centroids <- km_result$centers
+data$cluster <- factor(km_result$cluster)  # Convert cluster assignment to factor for coloring
+ggplot(data, aes(x = Voice.mail.plan, y = International.plan, color = cluster)) +
+  geom_point(alpha = 0.6, size = 3) +
+  scale_color_brewer(palette = "Set1") +  # Color palette can be changed
+  labs(title = "Cluster Plot of Total Day vs. Night Calls",
+       x = "Total Day Calls",
+       y = "Total Night Calls") +
+  theme_minimal()
+
+
+#### we perform PCA to visualize the clusters in a better way, selecting only the first 2 components
+pca <- prcomp(data_prepared)
+pca_df <- data.frame(pca$x[, 1:2], Cluster = data$cluster)
+
+ggplot(pca_df, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(alpha = 0.6, size = 3) +
+  scale_color_brewer(palette = "Set1") + 
+  labs(title = "PCA Plot of Clusters",
+       x = "Principal Component 1",
+       y = "Principal Component 2") +
+  theme_minimal()
+
+### selecting the number of clusters
+#### elbow method --> confirms that 3 is the appropiate choice for clusters
+
+
+#### silhouette method -->  3 has the highest silhouette width (we want an high silhouette width)
+s_i1 <- silhouette(km_result$cluster, dist(data_prepared))
+avg_sil_width <- mean(s_i1[, 3])
+print(paste("Average silhouette width:", avg_sil_width))
+
+#### calculating average silhouette widths for a range of k values
+k_values <- 2:10 
+avg_sil_widths <- sapply(k_values, function(k) {
+  set.seed(1)
+  km <- kmeans(data_prepared, centers = k, nstart = 25)
+  sil_widths <- silhouette(km$cluster, dist(data_prepared))
+  mean(sil_widths[, 3])
+})
+
+plot(k_values, avg_sil_widths, type = 'b', pch = 19, col = 'blue',
+     xlab = 'Number of Clusters', ylab = 'Average Silhouette Width',
+     main = 'Average Silhouette Width for Different k Values')
+#### it seems that 3 was our lucky guess for the number of clusters
+
+
+## Hierarchical clustering
+dist_matrix <- dist(data_prepared, method = "euclidean")
+hc <- hclust(dist_matrix, method = "ward.D2")
+plot(hc, main = "Dendrogram for Hierarchical Clustering", sub = "", xlab = "")
+
+clusters <- cutree(hc, k = 3)
+data$cluster_hc <- as.factor(clusters)
+
+pca_df$ClusterHC <- as.factor(clusters)
+ggplot(pca_df, aes(x = PC1, y = PC2, color = ClusterHC)) +
+  geom_point(alpha = 0.6, size = 3) +
+  scale_color_brewer(palette = "Set1") + 
+  labs(title = "PCA Plot of Hierarchical Clusters",
+       x = "Principal Component 1",
+       y = "Principal Component 2") +
+  theme_minimal()
+
+sil_widths_hc <- silhouette(clusters, dist_matrix)
+avg_sil_width_hc <- mean(sil_widths_hc[, 3])
+print(paste("Average silhouette width for hierarchical clustering:", avg_sil_width_hc))
+
+
+
 
