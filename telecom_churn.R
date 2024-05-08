@@ -28,7 +28,7 @@ library(purrr)
 library(ROSE)
 
 
-data = read.csv("TelecomChurn.csv")
+data = read.csv("~/Desktop/Telecom-Churn/TelecomChurn.csv")
 
 # 3333 rows and 20 columns
 
@@ -63,6 +63,7 @@ churn_percent <- data %>%
   group_by(Churn) %>%
   summarise(Count = n(), .groups = "drop") %>%
   mutate(Percent = Count / sum(Count) * 100)
+
 
 #print(churn_percent)
 
@@ -160,7 +161,7 @@ data %>%
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5))
 
-# customers who churned made more customer service calls
+# customers who churned made more customer service calls (?)
 
 
 # let's double check it with hypothesis testing

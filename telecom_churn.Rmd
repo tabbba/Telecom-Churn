@@ -1,0 +1,235 @@
+---
+title: "Data Analysis for Business - Midterm Project"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Standard Deviated Group {#main .tabset}
+
+Group members:
+
+-   Edoardo Cocciò - 282401
+-   Alexandra Tabarani - 282091
+-   Simone Filosofi - 284531
+-   Marta Torella - 284091
+
+# Task 1
+
+## Describe your dataset
+
+The dataset we are going to analyze is the "Telecom Churn" dataset, which is a dataset that contains information about a telecommunications company that is trying to understand why its customers are leaving the company. Our role is to build a classification model to help Telecom in targeting the willing-to-churn customers before it is too late.
+
+### EDA
+To begin our Expaloratory Data Analysis, we first  imported the necessary libraries and load the dataset. Immediately after we check the structure of the data to get an overall feeling of the respective types and values.
+```{r}
+str(data)
+```
+We see that the dataset contains 3333 observations and 20 variables. The variables are a mix of numeric and factor variables. The target variable is "Churn" which is a factor variable with two levels: "Yes" and "No". The other variables are a mix of numeric and factor variables. The numeric variables are "Account Length", "VMail Message", "Day Mins", "Day Calls", "Day Charge", "Eve Mins", "Eve Calls", "Eve Charge", "Night Mins", "Night Calls", "Night Charge", "Intl Mins", "Intl Calls", "Intl Charge", "CustServ Calls". The factor variables are "State", "Area Code", "Phone", "Int'l Plan", "VMail Plan".
+```{r}
+summary(data)
+```
+Using the `summary()` function, we obtained a snapshot of the central tendency and dispersion of the numerical features and the distribution of the categorical variables:
+- **Account Length**: 
+- **VMail Message**: 
+- **Day Mins**: 
+- **Day Calls**: 
+- **Day Charge**: 
+- **Eve Mins**: 
+- **Eve Calls**: 
+- **Eve Charge**: 
+- **Night Mins**: 
+- **Night Calls**: 
+- **Night Charge**: 
+- **Intl Mins**: 
+- **Intl Calls**: 
+- **Intl Charge**: 
+- **CustServ Calls**: 
+- **State**:
+- **Area Code**:
+- **Phone**:
+- **Int'l Plan**:
+- **VMail Plan**:
+
+### Missing values and duplicates
+```{r}
+sum(is.na(data))
+anyDuplicated(data)
+```
+We checked for missing values in the dataset and found that there are no missing values in the dataset. We also checked for duplicates and found that there are no duplicates either.
+
+### Univariate analysis for numerical variables
+```{r, echo=FALSE}
+continuous <- data[, sapply(data, is.numeric) | names(data) == "Churn"]
+
+continuous %>%
+  pivot_longer(cols = -Churn, names_to = "metric", values_to = "value") %>%
+  ggplot(aes(value, color = as.factor(Churn))) +
+  geom_density(alpha = 0.3) +
+  facet_wrap(vars(metric), scales = "free") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  scale_color_manual(name = "Churn", labels = c("No", "Yes"), values = c("#15aabf", "#ff8787")) +
+  labs(title = "Numeric Features", subtitle = "Univariate Distribution by Churn") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18, colour = "gray5"),
+    plot.subtitle = element_text(hjust = 0.5, colour = "gray5"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.position = "top"
+  )
+```
+The univariate analysis of the numerical variables shows that the distribution of the numerical variables is different for the two levels of the target variable "Churn". 
+Foe example there's a noticeable difference in the distribution of *customer service calls*: customers who churned seem to make more customer service calls, which could indicate a relationship between customer satisfaction and churn. It appears that customers who churned tend to have slightly higher day minutes and charges. This might suggest that customers with higher usage during the day are more likely to churn. Something similar happens with *total.day.charge* also. The distribution of the other variables is not as clear-cut as the ones mentioned above, but there are some differences in the distributions of the variables between the two levels of the target variable.
+
+### Hypothesis testing
+
+
+### Correlation analysis
+```{r, echo=FALSE}
+cor_mat <-
+  data %>% 
+  select(where(is.numeric)) %>% 
+  cor()
+
+corrplot(
+  main = "\n\nCorrelation Matrix",
+  cor_mat,
+  method = "color",
+  order = "alphabet",
+  type = "lower",
+  diag = FALSE,
+  number.cex = 0.8,
+  tl.cex = 0.6,
+  tl.srt = 45,
+  cl.pos = "b",
+  addgrid.col = "white",
+  addCoef.col = "white",
+  col = COL1("Purples"),
+  bg="gray",
+  tl.col = "grey50"
+)
+```
+The correlation matrix shows that there is a *perfect correlation between the charge variables and minutes variables* so we can drop all the minutes one *we drop Total.day.minutes, Total.eve.minutes, Total.night.minutes, Total.intl.minutes*.
+
+
+**N.B.** We computed more analysis, using plots and hypothesis testing, to understand the relationship between the variables and the target variable "Churn", but for limited space restrictions we will not show them here. In the next section we will report the main conclusions arising from this analysis.
+
+## Objectives of our Task 1
+Our Task 1 has the purpose to predict whether customers will churn or not. This task is useful for the company to take actions to prevent customers from churning. Moreover, it can helps the company to understand the reasons behind the churn and take actions to improve the service and customer satisfaction by offering also promotions to the customers that are more likely to churn.
+
+**CONCLUSION UP TO NOW:**
+- we dropped the *minutes variables* because they are *perfectly correlated with the charge variables*;
+- we saw that the *churn rate* is *higher* for customers that have an *international plan*;
+- we saw that the churn rate is *higher* for customers that do *not have a voice mail plan*;
+- we saw that the churn rate is *higher* for customers that *have a higher number of customer service calls*;
+- we saw that the churn rate is *higher* for customers that *have higher total day minutes and total day charge*;
+- we saw that the churn rate is *higher* for customers that *have higher total eve charge, night charge, and intl charge*;
+- we saw that *State* also *influences the churn rate*;
+
+
+## Lower-dimensional models
+Before proceeding with the full model we need to focus on some lower dimensional model in order to investigate some interesting relationships between the variables. 
+We only include customers who have made a service call:
+```{r}
+data <- data %>% filter(Customer.Service.Calls > 0)
+```
+
+(...)
+
+(The p-value for Customer.service.calls (<2e-16) suggests that there is a statistically significant association between the number of customer service calls and an increased likelihood of churn.)
+
+(...)
+
+(Since we are dealing with an imbalanced dataset we undersample the majority class (no churn) to balance the dataset)
+
+(...)
+
+## Preprocessing and feature engineering
+We should first deal with the 51 states: we can group them by region (north, south, east, west). 
+```{r, echo=FALSE} 
+map_region <- function(state) {
+  west.regions <- c("WA", "OR", "ID", "MT", "WY", "CA", "NV", "UT", "CO", "AK", "HI")
+  southwest.regions <- c("AZ", "NM", "TX", "OK")
+  midwest.regions <- c("ND", "SD", "NE", "KS", "MN", "IA", "MO", "WI", "IL", "IN", "MI", "OH")
+  southeast.regions <- c("AR", "LA", "MS", "AL", "TN", "KY", "WV", "VA", "NC", "SC", "GA", "FL")
+  northeast.regions <- c("ME", "NH", "VT", "MA", "RI", "CT", "NY", "PA", "NJ", "DE", "MD", "DC")
+  
+  if (state %in% west.regions) {
+    return("West")
+  } else if (state %in% midwest.regions) {
+    return("Mid West")
+  } else if (state %in% southeast.regions) {
+    return("South East")
+  } else if (state %in% northeast.regions) {
+    return("North East")
+  } else {
+    return("South West")  # in case there are any states not covered
+  }
+}
+
+data$Region <- sapply(data$State, map_region)
+data$Region <- as.factor(data$Region)
+```
+We'll use the regions column for the first models to avoid having high-cardinality encoded columns: we store the variable in order to use it later with more robust models (tree-based).
+```{r}
+state.column <- data$State
+data$State <- NULL
+```
+Let's see the distribution of churn by region:
+```{r}
+group_plt(Region)
+```
+Now let's re-do the chi square:
+```{r}
+contingency.table <- table(data$Region, data$Churn)
+chisq.test(contingency.table)
+```
+H0: Region and Churn are independent, H1: Region and Churn are dependent
+Since p-value > 0.05, we fail to reject the null hypothesis, therefore the region does not influence the churn rate. Let's see the distribution of churn by region:
+```{r, echo=FALSE}
+ggplot(data, aes(x = Region, fill = Churn)) + 
+  geom_bar(width = 0.7, color = 1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(hjust = 0, colour = "gray29", size = 10)) +
+  labs(title = "Churn by Region", x = "Region", y = "Count", fill = "Churn", subtitle = "Is Churn rate influenced by the Region?") +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) 
+```
+We can see that the churn rate is not influenced by the region. 
+
+### Splitting the data
+```{r}
+set.seed(1)
+ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = FALSE)
+data.train <- data[ids.train,]
+data.val <- data[-ids.train,] 
+```
+We  oversample the minority class to balance the dataset, now we have 4260 total observations.
+```{r}
+data.train.balanced <- ovun.sample(Churn ~ ., data = data.train, method = "over", N=4260)$data
+table(data.train.balanced$Churn)
+```
+
+
+
+
+
+
+## Main conclusions
+
+# Task 2: Cluster customers according to their behavior
+
+# Objectives of our Task 2
+ 
+
+
+
