@@ -794,6 +794,7 @@ bayesian.back <- step(logistic.baseline, direction = "backward", k = log(nrow(da
 bayesian.both <- step(logistic.baseline, direction = "both", k = log(nrow(data.train.balanced)))
 
 # Considering bidirectional elimination of both methods, BIC is more strict as it removes all the covariates representing the regions 
+# while AIC keeps them all.
 
 # Validation set results
 akaike.preds <- ifelse(predict(akaike.both, data.val) > 0.5, 1, 0)
