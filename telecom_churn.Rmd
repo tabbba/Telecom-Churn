@@ -483,6 +483,12 @@ bayesian.preds <- ifelse(predict(bayesian.both, data.val) > 0.5, 1, 0)
 
 #### ROC Curves
 
+The AUC-ROC curve is a graphical representation of the model's ability to discriminate between positive and negative classes. We plot the ROC curves for the full model, the AIC model, and the BIC model to compare their performance:
+
+- The full model has an AUC of 0.726 and it's clearly the model with the lowest discrimination ability;
+
+- The AIC model (AUC of 0.825) and the BIC model (AUC of 0.834) have two very similar AUCs, but the BIC model has a slightly better performance.
+
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 par(mfrow = c(2, 2))
 
@@ -539,15 +545,11 @@ comparison_df
 
 ##### LASSO and RIDGE REGULARIZATION
 
-We will use LASSO and Ridge regularization to improve the logistic regression model. We will use:
-
-\-`glmnet` package to perform the regularization;
-
--   `cv.glmnet` function to perform cross-validation to find the optimal value of the regularization parameter lambda;
-
--   `glmnet` function to fit the model with the optimal lambda value.
+We leverage both LASSO and Ridge regularization methods to fine-tune our logistic regression model, aiming to enhance its predictive capabilities while addressing potential multicollinearity and feature redundancy.
 
 **LASSO**:
+
+After tuning over a grid of parameters, the highest achieved accuracy is 77.42%. The optimal regularization parameters selected are alpha = 1 and lambda = 0, indicating LASSO regularization without penalty.
 
 ```{r}
 set.seed(1)
@@ -576,6 +578,8 @@ lasso.plot <- lasso %>%
 ```
 
 **RIDGE**:
+
+Using the Ridge regularization technique with the glmnet method and cross-validation, we achieved a maximum accuracy of 77.07%. The best-performing parameters selected are alpha = 0 and lambda = 0.01034, indicating Ridge regularization without penalty.
 
 ```{r}
 set.seed(1)
@@ -613,6 +617,8 @@ auc.ridge <- roc(data.val$Churn, as.numeric(ridge.predict),
                  plot = TRUE, main = "ROC Curve Ridge Model", col = "black", lwd = 3, 
                  auc.polygon = TRUE, print.auc = TRUE)
 ```
+
+As shown in the above plots, the AUC for the Lasso model is 0.778, while the AUC for the Ridge model is 0.776.
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
 grid.arrange(lasso.plot, ridge.plot, top = "Penalized Approaches for Logistic Regression")
