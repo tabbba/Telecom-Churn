@@ -692,7 +692,7 @@ par(mar=c(5,5,2,2))  # Adjust margin sizes to avoid the "Error in plot.new() : f
 plot(tree.full)
 text(tree.full, pretty = 0, cex = 0.7)
 ```
-
+Computing the confusion matrix we can notice that the model accurately predicts 651 'False' instances and 100 'True' instances, but misclassifies 14 'False' instances and 69 'True' instances. It achieves an accuracy of 90.05%, with a precision of 87.72% and recall of 59.17%.
 ```{r echo=FALSE}
 tree.pred <- predict(tree.full, data.val, type = "class")
 table(tree.pred, data.val$Churn)
@@ -727,7 +727,7 @@ table(pruned.pred, data.val$Churn)
 trees.metrics <- get.metrics(table(pruned.pred, data.val$Churn))
 trees.auc <- roc(data.val$Churn, as.numeric(pruned.pred))
 ```
-
+These values inside the contingency table show that the pruned tree model are exactly the same as the full tree model, which is a good sign of the model's robustness.
 ```{r echo=FALSE}
 cv_trees_df <- data.frame(Model = "CV Decision Trees",
                           Accuracy = trees.metrics$Accuracy,
@@ -818,11 +818,15 @@ legend("topright", legend = c("Train", "Test"), col=c(1, 3), lty=1, lwd=2, cex =
 abline(v = which.min(val.errors))
 ```
 
+The vertical line highlights the number of trees that minimizes the validation error, helping identify the optimal number of trees for the model. In our specific case the value is 35.
+
 ```{r echo=FALSE, results='hide', warning=FALSE, message=FALSE}
 (feature.importance <- xgb.importance(model = fit.xg))
 ```
 
 ##### Feature Importance
+
+The feature importance plot below illustrates the relative importance of each feature in the XGBoost mode:
 
 ```{r, echo=FALSE, fig.align='center', warning=FALSE, message=FALSE}
 xgb.plot.importance(importance_matrix = feature.importance)
