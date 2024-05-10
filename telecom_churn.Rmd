@@ -485,9 +485,9 @@ bayesian.preds <- ifelse(predict(bayesian.both, data.val) > 0.5, 1, 0)
 
 The AUC-ROC curve is a graphical representation of the model's ability to discriminate between positive and negative classes. We plot the ROC curves for the full model, the AIC model, and the BIC model to compare their performance:
 
-- The full model has an AUC of 0.726 and it's clearly the model with the lowest discrimination ability;
+-   The full model has an AUC of 0.726 and it's clearly the model with the lowest discrimination ability;
 
-- The AIC model (AUC of 0.825) and the BIC model (AUC of 0.834) have two very similar AUCs, but the BIC model has a slightly better performance.
+-   The AIC model (AUC of 0.825) and the BIC model (AUC of 0.834) have two very similar AUCs, but the BIC model has a slightly better performance.
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 par(mfrow = c(2, 2))
@@ -551,7 +551,7 @@ We leverage both LASSO and Ridge regularization methods to fine-tune our logisti
 
 After tuning over a grid of parameters, the highest achieved accuracy is 77.42%. The optimal regularization parameters selected are alpha = 1 and lambda = 0, indicating LASSO regularization without penalty.
 
-```{r}
+```{r echo=FALSE}
 set.seed(1)
 ctrl <- trainControl(method = "cv", number = 10)
 lasso <- train(Churn ~ ., data = data.train.balanced, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
@@ -581,7 +581,7 @@ lasso.plot <- lasso %>%
 
 Using the Ridge regularization technique with the glmnet method and cross-validation, we achieved a maximum accuracy of 77.07%. The best-performing parameters selected are alpha = 0 and lambda = 0.01034, indicating Ridge regularization without penalty.
 
-```{r}
+```{r echo=FALSE}
 set.seed(1)
 ridge <- train(Churn ~ ., data = data.train.balanced, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
 max(ridge$results$Accuracy)
@@ -692,7 +692,9 @@ par(mar=c(5,5,2,2))  # Adjust margin sizes to avoid the "Error in plot.new() : f
 plot(tree.full)
 text(tree.full, pretty = 0, cex = 0.7)
 ```
+
 Computing the confusion matrix we can notice that the model accurately predicts 651 'False' instances and 100 'True' instances, but misclassifies 14 'False' instances and 69 'True' instances. It achieves an accuracy of 90.05%, with a precision of 87.72% and recall of 59.17%.
+
 ```{r echo=FALSE}
 tree.pred <- predict(tree.full, data.val, type = "class")
 table(tree.pred, data.val$Churn)
@@ -727,7 +729,9 @@ table(pruned.pred, data.val$Churn)
 trees.metrics <- get.metrics(table(pruned.pred, data.val$Churn))
 trees.auc <- roc(data.val$Churn, as.numeric(pruned.pred))
 ```
+
 These values inside the contingency table show that the pruned tree model are exactly the same as the full tree model, which is a good sign of the model's robustness.
+
 ```{r echo=FALSE}
 cv_trees_df <- data.frame(Model = "CV Decision Trees",
                           Accuracy = trees.metrics$Accuracy,
@@ -801,6 +805,8 @@ xg.pred <- ifelse(predict(fit.xg, X.val)> 0.5, 1, 0)
 table(xg.pred, data.val$Churn)
 get.metrics(table(xg.pred, data.val$Churn))
 ```
+
+##### Validation error and number of trees
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE}
 train.errors <- fit.xg$evaluation_log$train_error
@@ -997,9 +1003,7 @@ h_centroid <- hclust(dist_matrix, method = "centroid")
 h_ward <- hclust(dist_matrix, method = "ward.D2")
 ```
 
-By plotting the dendorgrams for the different linkage methods, we can identify the optimal number of clusters. 
-The Complete Linkage shows a more balanced structure, suggesting uniformity in cluster compactness. Single Linkage results in elongated clusters, prone to chaining effects, highlighting susceptibility to noise. Average Linkage offers a moderate clustering structure, more natural than Single or Complete Linkage. Centroid Linkage shows variations in cluster sizes, influenced by centroid positions which may shift due to outliers. Ward's Method demonstrates very compact and well-defined clusters, effectively minimizing within-cluster variance, suggesting it as the most robust method for distinct and cohesive grouping in this dataset. 
-As shown in the plots below, the **ward linkage method** in particular suggests that the optimal number of clusters is 3, which is consistent with the results obtained with the kmeans algorithm.
+By plotting the dendorgrams for the different linkage methods, we can identify the optimal number of clusters. The Complete Linkage shows a more balanced structure, suggesting uniformity in cluster compactness. Single Linkage results in elongated clusters, prone to chaining effects, highlighting susceptibility to noise. Average Linkage offers a moderate clustering structure, more natural than Single or Complete Linkage. Centroid Linkage shows variations in cluster sizes, influenced by centroid positions which may shift due to outliers. Ward's Method demonstrates very compact and well-defined clusters, effectively minimizing within-cluster variance, suggesting it as the most robust method for distinct and cohesive grouping in this dataset. As shown in the plots below, the **ward linkage method** in particular suggests that the optimal number of clusters is 3, which is consistent with the results obtained with the kmeans algorithm.
 
 ```{r, echo=FALSE, fig.show='hold'}
 par(mfrow=c(1, 5))
@@ -1011,7 +1015,7 @@ plot(hclust(dist_matrix, method = "ward.D2"), main = "Ward's Method")
 par(mfrow=c(1, 1))
 ```
 
-After identifying the optimal number of clusters, we can proceed by also checking the silouhette values achieved by the different linkage methods. When analyzed alongside dendrograms, high silhouette scores confirm the visual separation and compactness seen in methods like Ward's, suggesting effective clustering. Conversely, low scores, particularly with methods like Single Linkage which shows elongated clusters, indicate issues such as chaining effects or potential misassignments. Moderate scores for Average or Complete Linkage reflect better clustering than Single but possibly with some overlaps. 
+After identifying the optimal number of clusters, we can proceed by also checking the silouhette values achieved by the different linkage methods. When analyzed alongside dendrograms, high silhouette scores confirm the visual separation and compactness seen in methods like Ward's, suggesting effective clustering. Conversely, low scores, particularly with methods like Single Linkage which shows elongated clusters, indicate issues such as chaining effects or potential misassignments. Moderate scores for Average or Complete Linkage reflect better clustering than Single but possibly with some overlaps.
 
 ```{r, echo=FALSE}
 sil_width <- function(method) {
@@ -1024,8 +1028,7 @@ sapply(methods, sil_width)
 best_method <- "ward.D2"
 ```
 
-Finally, we proceed with the hierarchical clustering using the **ward linkage method** and 3 clusters, as suggested by the silhouette scores. We then visualize the clusters using PCA, as we did for the kmeans algorithm.
-The PCA-based cluster visualization using Ward's method clearly identifies three distinct customer groups in the dataset: a densely packed central cluster (blue), a broadly distributed cluster with some overlap (red), and a smaller, more distinct cluster (green). These clusters, represented on two principal components that likely capture the most significant variances in customer behavior such as usage, suggest specific strategies for targeted marketing, customer service enhancements, and product development. The graph validates the effectiveness of Ward's method in hierarchical clustering by showing well-defined group separations, providing robust insights for strategic business decisions focused on tailored customer engagement and service offerings.
+Finally, we proceed with the hierarchical clustering using the **ward linkage method** and 3 clusters, as suggested by the silhouette scores. We then visualize the clusters using PCA, as we did for the kmeans algorithm. The PCA-based cluster visualization using Ward's method clearly identifies three distinct customer groups in the dataset: a densely packed central cluster (blue), a broadly distributed cluster with some overlap (red), and a smaller, more distinct cluster (green). These clusters, represented on two principal components that likely capture the most significant variances in customer behavior such as usage, suggest specific strategies for targeted marketing, customer service enhancements, and product development. The graph validates the effectiveness of Ward's method in hierarchical clustering by showing well-defined group separations, providing robust insights for strategic business decisions focused on tailored customer engagement and service offerings.
 
 ```{r, echo=FALSE, fig.width=10, fig.height=5}
 hc_best <- hclust(dist_matrix, method = best_method)
@@ -1044,4 +1047,3 @@ ggplot(plot_data, aes(x = PC1, y = PC2, color = cluster)) +
 ```
 
 The comparison between the PCA plots of k-means clustering and hierarchical clustering using Ward's method reveals distinct differences in clustering outcomes. K-means clustering exhibits greater overlap and less defined separation between clusters, particularly between the blue and red clusters, suggesting a less effective partitioning of the dataset. In contrast, hierarchical clustering demonstrates clearer and more distinct cluster boundaries, with notably more compact and homogeneous clusters. This indicates that hierarchical clustering with Ward’s method provides more precise and well-defined groupings, enhancing the interpretability and utility of the clustering results. Consequently, hierarchical clustering appears more suitable for this dataset, offering robust insights for targeted strategies and data-driven decisions.
-
