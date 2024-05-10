@@ -1088,180 +1088,7 @@ xgb_df <- data.frame(Model = "CV XGB",
 comparison_df <- rbind(comparison_df, xgb_df)
 comparison_df
 
-# CLUSTERING PRIMA BOZZA
-# preparing data
-
-clustering_data <- read.csv("TelecomChurn.csv")
-
-clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Churn", "State"))]
-
-# create a variable total_minute
-clustering_data$Total.minutes <- clustering_data$Total.day.minutes + clustering_data$Total.eve.minutes + clustering_data$Total.night.minutes + clustering_data$Total.intl.minutes
-clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.minutes", "Total.eve.minutes", "Total.night.minutes", "Total.intl.minutes"))]
-
-# total_charge
-clustering_data$Total.charge <- clustering_data$Total.day.charge + clustering_data$Total.eve.charge + clustering_data$Total.night.charge + clustering_data$Total.intl.charge
-clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.charge", "Total.eve.charge", "Total.night.charge", "Total.intl.charge"))]
-
-# total call
-clustering_data$Total.calls <- clustering_data$Total.day.calls + clustering_data$Total.eve.calls + clustering_data$Total.night.calls + clustering_data$Total.intl.calls
-clustering_data <- clustering_data[, !(names(clustering_data) %in% c("Total.day.calls", "Total.eve.calls", "Total.night.calls", "Total.intl.calls"))]
-
-
-numerical_vars <- sapply(clustering_data, is.numeric)
-clustering_data[numerical_vars] <- scale(clustering_data[numerical_vars])
-
-convert_yes_no <- function(column) {
-  ifelse(column == "Yes", 1, 0)
-}
-
-clustering_data$International.plan <- convert_yes_no(clustering_data$International.plan)
-clustering_data$Voice.mail.plan <- convert_yes_no(clustering_data$Voice.mail.plan)
-
-head(clustering_data)
-
-
-# number of K
-# elbow rule plot
-fviz_nbclust(clustering_data, kmeans, method = "wss") +
-  labs(subtitle = "WSS - Elbow method")
-# avg silhouette plot
-fviz_nbclust(clustering_data, kmeans, method = "silhouette") +
-  labs(subtitle = "Silhouette method")
-
-
-# K-means clustering
-set.seed(123)
-kmeans_model <- kmeans(clustering_data, centers = 4, nstart = 25)
-kmeans_model
-
-# silhouette results
-silhouette <- silhouette(kmeans_model$cluster, dist(clustering_data))
-mean(silhouette[, 3])
-
-# plot silhouette
-fviz_silhouette(silhouette) +
-  theme_minimal()
-
-# visualization
-fviz_cluster(kmeans_model, data = clustering_data, geom = "point", stand = FALSE, ellipse.type = "convex") +
-  labs(title = "K-means Clustering") +
-  theme_minimal()
-
-# pca
-pca <- prcomp(clustering_data, scale = TRUE)
-summary(pca)
-
-plot(pca, type = "l")
-abline(h = 1, col = "red", lty = 2) 
-
-fviz_pca_var(pca, col.var = "contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE) +
-  theme_minimal()
-
-# k-means with pca
-set.seed(123)
-kmeans_pca <- kmeans(pca$x[, 1:5], centers = 2, nstart = 25)
-kmeans_pca
-
-silhouette_pca <- silhouette(kmeans_pca$cluster, dist(pca$x[, 1:5]))
-mean(silhouette_pca[, 3])
-
-# visualization
-fviz_cluster(kmeans_pca, data = pca$x[, 1:5], geom = "point", stand = FALSE, ellipse.type = "convex") +
-  labs(title = "K-means Clustering with PCA") +
-  theme_minimal()
-
-
-
-
-
-
-?hclust
-
-# HIERARCHICAL CLUSTERING
-# Finding distance matrix
-distance_mat <- dist(clustering_data, method = 'euclidean')
-distance_mat
-
-# Fitting Hierarchical clustering Model 
-set.seed(240)  
-Hierar_cl <- hclust(distance_mat, method = "ward")
-Hierar_cl
-
-plot(Hierar_cl)
-
-# Compute with agnes
-
-# methods to assess which method between avg, single, complete, ward is the best
-# m <- c( "average", "single", "complete", "ward")
-# names(m) <- c( "average", "single", "complete", "ward")
-
-# function to compute coefficient
-# ac <- function(x) {
-#  agnes(clustering_data, method = x)$ac
-# }
-
-# map_dbl(m, ac)
-
-# ward is the best method 0.97
-
-# hc3 <- agnes(clustering_data, method = "ward")
-# pltree(hc3, cex = 0.6, hang = -1, main = "Dendrogram") 
-
-# fitting the model and cutting the tree at 2
-sub_grp <- cutree(Hierar_cl, k = 4)
-table(sub_grp)
-
-# visualizing the clusters
-fviz_cluster(list(data = clustering_data, cluster = sub_grp)) +
-  labs(title = "Hierarchical Clustering") +
-  theme_minimal()
-
-# silhouette
-silhouette_hc <- silhouette(sub_grp, dist(clustering_data))
-mean(silhouette_hc[, 3])
-
-# pca
-pca_hc <- prcomp(clustering_data, scale = TRUE)
-summary(pca_hc)
-
-#  6 components to have 0.88 cum var
-fviz_pca_var(pca_hc, col.var = "contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE) +
-  theme_minimal()
-
-# hier with pca
-set.seed(123)
-kmeans_pca_hc <- kmeans(pca_hc$x[, 1:6], centers = 2, nstart = 25)
-kmeans_pca_hc
-
-silhouette_pca_hc <- silhouette(kmeans_pca_hc$cluster, dist(pca_hc$x[, 1:6]))
-mean(silhouette_pca_hc[, 3]) 
-  ----------------------
-
-
-
-
-## Hierarchical clustering
-dist_matrix <- dist(data_prepared, method = "euclidean")
-hc <- hclust(dist_matrix, method = "ward.D2")
-plot(hc, main = "Dendrogram for Hierarchical Clustering", sub = "", xlab = "")
-
-clusters <- cutree(hc, k = 3)
-data$cluster_hc <- as.factor(clusters)
-
-pca_df$ClusterHC <- as.factor(clusters)
-ggplot(pca_df, aes(x = PC1, y = PC2, color = ClusterHC)) +
-  geom_point(alpha = 0.6, size = 3) +
-  scale_color_brewer(palette = "Set1") + 
-  labs(title = "PCA Plot of Hierarchical Clusters",
-       x = "Principal Component 1",
-       y = "Principal Component 2") +
-  theme_minimal()
-
-sil_widths_hc <- silhouette(clusters, dist_matrix)
-avg_sil_width_hc <- mean(sil_widths_hc[, 3])
-print(paste("Average silhouette width for hierarchical clustering:", avg_sil_width_hc))
-
+# CLUSTERING
 ## third approach
 ### Kmeans clustering
 #### usage behavior: account length, total charge (i wont include total minutes since there's perfect correlation with total charge), total calls
@@ -1316,20 +1143,51 @@ mean(silhouette[, 3])
 fviz_silhouette(silhouette) +
   theme_minimal()
 
+fviz_cluster(km_result, data = clustering_data, geom = "point", stand = FALSE, ellipse.type = "convex") +
+  labs(title = "K-means Clustering") +
+  theme_minimal()
+
+
 # HIERARCHICAL CLUSTERING --> we use the correlation based method 
 ## distance matrix
 dist_matrix <- dist(clustering_data)
-## fitting teh model, trying different methods
+## fitting the model, trying different methods
+set.seed(1)
 h_complete <- hclust(dist_matrix, method = "complete")
 h_single <- hclust(dist_matrix, method = "single")
 h_average <- hclust(dist_matrix, method = "average")
 h_centroid <- hclust(dist_matrix, method = "centroid")
 h_ward <- hclust(dist_matrix, method = "ward.D2")
-## plotting corresponding dendrograms
-plot(h_complete, main = "Complete Linkage", xlab = "", sub = "", cex = 0.9)
-plot(h_single, main = "Single Linkage", xlab = "", sub = "", cex = 0.9)
-plot(h_average, main = "Average Linkage", xlab = "", sub = "", cex = 0.9)
-plot(h_centroid, main = "Centroid Linkage", xlab = "", sub = "", cex = 0.9)
-plot(h_ward, main = "Ward's Method", xlab = "", sub = "", cex = 0.9)
-##
 
+## plotting corresponding dendrograms
+plot(hclust(dist_matrix, method = "complete"), main = "Complete Linkage")
+plot(hclust(dist_matrix, method = "single"), main = "Single Linkage")
+plot(hclust(dist_matrix, method = "average"), main = "Average Linkage")
+plot(hclust(dist_matrix, method = "centroid"), main = "Centroid Linkage")
+plot(hclust(dist_matrix, method = "ward.D2"), main = "Ward's Method")
+
+## silhouettes 
+sil_width <- function(method) {
+  cluster <- hclust(dist_matrix, method = method)
+  silhouette_stats <- silhouette(cutree(cluster, k = 3), dist_matrix)
+  mean(silhouette_stats[, "sil_width"])
+}
+
+
+methods <- c("complete", "single", "average", "centroid", "ward.D2")
+sapply(methods, sil_width)
+best_method <- "ward.D2"
+
+hc_best <- hclust(dist_matrix, method = best_method)
+clusters <- cutree(hc_best, k = 3)
+pca <- prcomp(clustering_data, scale. = TRUE)  # Ensure data is scaled
+plot_data <- data.frame(pca$x[, 1:2])  # Using the first two principal components
+plot_data$cluster <- factor(clusters)
+ggplot(plot_data, aes(x = PC1, y = PC2, color = cluster)) +
+  geom_point(alpha = 0.5) +  # Points with some transparency
+  labs(title = "Cluster Visualization with PCA",
+       subtitle = paste("Hierarchical Clustering with", best_method, "Method"),
+       x = "Principal Component 1",
+       y = "Principal Component 2") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1") 
