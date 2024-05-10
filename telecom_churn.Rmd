@@ -16,7 +16,7 @@ Group members:
 
 ## Task 1 {.tabset .tabset-fade}
 
-The dataset we are going to analyze is the "Telecom Churn" dataset, which is a dataset that contains information about a telecommunications company that is trying to understand why its customers are leaving the company. Our role is to build a classification model to help Telecom in targeting the willing-to-churn customers before it is too late.
+The dataset we are going to analyze is the "Telecom Churn" dataset, which contains information about US Telecom. For this first task, our objective is to predict customer churn, enabling the company to implement preventative measures to retain clients; as a matter of fact, by identifying customers at high risk of churn, the company can proactively offer targeted promotions to improve retention rates.
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 library(ggplot2)
@@ -54,30 +54,53 @@ data <- read.csv("TelecomChurn.csv")
 
 ### EDA
 
-```{r}
+We start by performing an exploratory data analysis (EDA) to understand the structure of the dataset and the relationships between the variables. Starting with a general overview of the dataset, we can see that it contains 3333 observations and 20 variables. The variables are a mix of numerical and categorical variable; we proceed by factoring the categorical variables in order to better deal with them later.
+
+```{r echo=FALSE}
 names(data)
 
 data$State = as.factor(data$State)
 data$International.plan = as.factor(data$International.plan)
 data$Voice.mail.plan = as.factor(data$Voice.mail.plan)
 data$Churn = as.factor(data$Churn)
-```
 
-#### Missing values and duplicates
-
-```{r}
-sum(is.na(data))
-anyDuplicated(data)
-```
-
-We checked for missing values in the dataset and found that there are no missing values in the dataset. We also checked for duplicates and found that there are no duplicates either.
-
-```{r}
 continuous_vars <- data[, sapply(data, is.numeric)]
 categorical_vars <- data[, sapply(data, is.factor) & !names(data) %in% "Churn"]
 ```
 
-#### Univariate analysis for numerical variables
+#### Missing Values and Duplicates
+
+A crucial step in the data analysis process is to check for missing values and duplicates in the dataset to ensure that the data is clean and ready for analysis; in our case we have no missing values and no duplicates. After ensuring dataset integrity, we proceed with the analysis.
+
+```{r echo=FALSE, results='hide'}
+sum(is.na(data))
+anyDuplicated(data)
+```
+
+#### Univariate Analysis 
+
+We proceed by conducting an univariate analysis of the variables in our dataset: our first step is to check the distribution of the target variable 'Churn'; indeed, we identified the variable 'Churn' as the target of our analysis since, as previously stated, the goal of our first task is to build a model to predict customer churn. 
+As shown by the below pie chart,the distribution of the target variable is unbalanced, with 85.5% of the customers not churning and 14.5% churning.
+
+```{r echo=FALSE, fig.align='center', out.width="50%"}
+churn_percent <- data %>%
+  group_by(Churn) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  mutate(Percent = Count / sum(Count) * 100)
+
+
+ggplot(churn_percent, aes(x = "", y = Percent, fill = Churn)) +
+  geom_col(width = 1, color = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  scale_fill_manual(values = c("False" = "#dab0ff", "True" = "#ADD8E6"), labels = c("False" = "No", "True" = "Yes")) +
+  labs(title = "Percentage of Churn", fill = "Churn") +
+  geom_text(aes(label = paste0(round(Percent, 1), "%")), position = position_stack(vjust = 0.5)) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18))
+
+```
+
+We now proceed with the univariate analysis of the numerical variables in the dataset. We will plot the distribution of the numerical variables by the target variable 'Churn' to see if there are any differences in the distribution of the numerical variables between the two levels of the target variable.
 
 ```{r, echo=FALSE, fig.align='center', fig.width=10, fig.height=10}
 continuous <- data[, sapply(data, is.numeric) | names(data) == "Churn"]
@@ -89,7 +112,7 @@ continuous %>%
   facet_wrap(vars(metric), scales = "free") +
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
-  scale_color_manual(name = "Churn", labels = c("No", "Yes"), values = c("#15aabf", "#ff8787")) +
+  scale_color_manual(name = "Churn", labels = c("No", "Yes"), values = c("#dab0ff", "#ADD8E6")) +
   labs(title = "Numeric Features", subtitle = "Univariate Distribution by Churn") +
   theme_minimal() +
   theme(
@@ -102,39 +125,20 @@ continuous %>%
   )
 ```
 
-The univariate analysis of the numerical variables shows that the distribution of the numerical variables is different for the two levels of the target variable "Churn". Foe example there's a noticeable difference in the distribution of **customer service calls**: customers who churned seem to make more customer service calls, which could indicate a relationship between customer satisfaction and churn. It appears that customers who churned tend to have slightly higher day minutes and charges. This might suggest that customers with higher usage during the day are more likely to churn. Something similar happens with **total.day.charge** also. The distribution of the other variables is not as clear-cut as the ones mentioned above, but there are some differences in the distributions of the variables between the two levels of the target variable.
+The above univariate analysis of the numerical variables shows that the variables distribution differs remarkably for the two levels of the target variable "Churn" in a couple of cases. Indeed, there's a noticeable difference in the distribution of **customer service calls**: customers who churned seem to make more customer service calls, which could indicate a relationship between customer satisfaction and churn. It also appears that customers who churned tend to have slightly higher **total day minutes** and **total day charges**; this might suggest that customers with higher usage during the day are more likely to churn. The other variables do not show a significant difference in distribution between the two levels of the target variable.
 
-```{r include=FALSE}
-continuous_vars <- data[, sapply(data, is.numeric)]
-categorical_vars <- data[, sapply(data, is.factor) & !names(data) %in% "Churn"]
-```
-
-#### Distribution of Target and Categorical Variables
+Another remarkable imbalance can be found in the distribution of both **International.plan** and **Voice.mail.plan**. The majority of customers do not have an international plan nor a voice mail plan; this might suggest that these services are not very popular among customers.
 
 ```{r echo=FALSE, fig.show ="hold", out.width="50%"}
-churn_percent <- data %>%
-  group_by(Churn) %>%
-  summarise(Count = n(), .groups = "drop") %>%
-  mutate(Percent = Count / sum(Count) * 100)
-
-ggplot(churn_percent, aes(x = "", y = Percent, fill = Churn)) +
-  geom_col(width = 1, color = 1) +
-  coord_polar("y", start = 0) +
-  theme_void() +
-  scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
-  labs(title = "Percentage of Churn", fill = "Churn") +
-  geom_text(aes(label = paste0(round(Percent, 1), "%")), position = position_stack(vjust = 0.5)) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18))
-
 long_data <- categorical_vars %>%
   pivot_longer(cols = c("International.plan", "Voice.mail.plan"), names_to = "Category", values_to = "Value")
 
 ggplot(long_data, aes(x = Value, fill = Value)) +
   geom_bar(color = "black") +
   facet_wrap(~ Category, scales = "free_x", nrow = 2, ncol = 2) +
-  labs(title = "Distribution of Categorical Variables", x = NULL, y = "Count") +
+  labs(title = "Plan Distribution", x = NULL, y = "Count") +
   theme_minimal() +
-  scale_fill_manual(values = c("No" = "#ffe8cc", "Yes" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
+  scale_fill_manual(values = c("No" = "#ADD8E6", "Yes" = "#dab0ff"), labels = c("False" = "No", "True" = "Yes")) +
   theme(
     strip.text = element_text(size = 12),
     axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
@@ -144,7 +148,9 @@ ggplot(long_data, aes(x = Value, fill = Value)) +
 
 ```
 
-```{r message=FALSE, warning=FALSE, include=FALSE}
+To conclude the analysis of the categorical variables, we also analysed the distribution of the **State** variable; the below plot shows the distribution of customers across different states in the US. 
+
+```{r message=FALSE, warning=FALSE}
 us_map <- map_data("state") %>% 
   as_tibble()
 
@@ -161,9 +167,7 @@ us_map %>%
     title = "US Map",
     subtitle = "Based on Latitude and Longitude"
   ) + theme(plot.title = element_text(hjust=0.5))
-```
 
-```{r echo=FALSE, fig.align="center", fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
 state_names <- c(KS = "kansas", OH = "ohio", NJ = "new jersey", OK = "oklahoma",
                  AL = "alabama", MA = "massachusetts", MO = "missouri", LA = "louisiana",
                  WV = "west virginia", IN = "indiana", RI = "rhode island", IA = "iowa",
@@ -446,7 +450,6 @@ bayesian.both <- step(logistic.baseline, direction = "both", k = log(nrow(data.t
 Considering bidirectional elimination of both methods, BIC is more strict as it removes all the covariates representing the regions.
 
 After that we compare the validation set results:
-
 **AIC**:
 ```{r, echo=FALSE}
 akaike.preds <- ifelse(predict(akaike.both, data.val) > 0.5, 1, 0)
@@ -598,110 +601,17 @@ ridge_df <- data.frame(Model = "Logistic Ridge",
                        F1_Score = ridge.metrics$F1,
                        AUC = as.numeric(auc.ridge$auc))
 ```
-
-
 Now let's compare the metrics obtained with the different models:
 ```{r, echo=FALSE}
 comparison_df <- rbind(comparison_df, ridge_df, lasso_df)
 comparison_df
 ```
 Our baseline logistic regression model demonstrates moderate performance across various metrics:
-
 - following analyses under different approaches, accuracy ranges from 78.54% to 83.69%;
-
 - precision consistently hovers around 76%, indicating a high percentage of correctly predicted positive cases;
-
 - recall is lower, ranging from 36% to 43%, suggesting room for improvement in capturing all positive cases;
-
-- the F1 score, a balanced metric, varies from 0.49 to 0.50. AUC values, indicating model discrimination, range from 0.73 to 0.83;
-
+- the F1 score, a balanced metric, varies from 0.49 to 0.50. AUC values, indicating model discrimination, range from 0.73 to 0.83.
 Overall, the model performs reasonably well but could benefit from increased recall to capture more positive cases.
-
-.
-
-From now on we are studying other models and comparing the metrics with the logistic regression we chose as baseline model:
-
-- **Decision trees**
-
-- **Random Forest**
-
-- **Gradient Boosting**
-
-#### Decision Trees
-First of all we split again to undo the scaling and to make trees more interpretable for us:
-```{r}
-set.seed(1)
-ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = FALSE)
-data.train <- data[ids.train,]
-data.val <- data[-ids.train,] 
-```
-Then we oversampled the minority class in order to have a total of 4260 observations as in the previous case:
-```{r results='hide'}
-data.train.balanced <- ovun.sample(Churn ~ ., data = data.train, method = "over", N=4260)$data
-table(data.train.balanced$Churn)
-```
-```{r echo=FALSE}
-set.seed(1) # otherwise results might be inconsistent due to ties
-tree.full <- tree(Churn ~ ., data = data.train.balanced)
-par(mar=c(5,5,2,2))  # Adjust margin sizes to avoid the "Error in plot.new() : figure margins too large"
-plot(tree.full)
-text(tree.full, pretty = 0, cex = 0.7)
-```
-
-```{r echo=FALSE}
-tree.pred <- predict(tree.full, data.val, type = "class")
-table(tree.pred, data.val$Churn)
-get.metrics(table(tree.pred, data.val$Churn))
-```
-
-In order to improve the performance and generalization ability of decision trees (to prevent overfitting) we adopted a Pruning approach with cross-validation:
-```{r echo=FALSE}
-cv.trees <- cv.tree(tree.full, FUN = prune.misclass)
-(optimal.size <- cv.trees$size[which.min(cv.trees$dev)])
-par(mfrow = c(1,2))
-plot(cv.trees$size, cv.trees$dev/nrow(data.val), type = "b", xlab = "Size", ylab = "Error")
-plot(cv.trees$k, cv.trees$dev/nrow(data.val), type = "b", col = 3, xlab = "K", ylab = "Error")
-```
-
-Our pruned tree:
-```{r echo=FALSE}
-plot(pruned.tree)
-text(pruned.tree, pretty = 0, cex = 0.7)
-```
-
-After pruning the performance became:
-```{r echo=FALSE}
-pruned.pred <- predict(pruned.tree, data.val, type = "class")
-table(pruned.pred, data.val$Churn)
-trees.metrics <- get.metrics(table(pruned.pred, data.val$Churn))
-trees.auc <- roc(data.val$Churn, as.numeric(pruned.pred))
-```
-#### Random Forest
-```{r}
-set.seed(1)
-fit.bag <- randomForest(Churn ~ ., data = data.train.balanced, mtry = ncol(data.train.balanced) - 1, ntree = 500, importance = T) 
-```
-
-```{r echo=FALSE}
-layout(matrix(c(1,2),nrow=1),
-       width=c(4,1)) 
-par(mar=c(5,4,4,0)) # No margin right side
-plot(fit.bag, log="y")
-par(mar=c(5,0,4,2)) # No margin left side
-plot(c(0,1),type="n", axes=F, xlab="", ylab="")
-legend("bottom", colnames(fit.bag$err.rate),col=1:4,cex=0.8,fill=1:4)
-```
-
-```{r echo=FALSE}
-varImpPlot(fit.bag)
-mean(fit.bag$err.rate[,1]) # OOB test error estimation
-```
-
-
-
-
-#### Gradient Boosting
-
 
 ### Main conclusions
 
