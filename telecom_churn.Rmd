@@ -21,6 +21,7 @@ The dataset we are going to analyze is the "Telecom Churn" dataset, which is a d
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 library(ggplot2)
 library(corrplot)
+library(mapproj)
 library(dplyr)
 library(tidyr)
 library(skimr)
