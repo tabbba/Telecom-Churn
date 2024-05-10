@@ -303,12 +303,18 @@ We can see that the churn rate increases as the number of customer service calls
 **N.B.** We computed more analysis, using plots and hypothesis testing, to understand the relationship between the variables and the target variable "Churn", but for limited space restrictions we will not show them here. In the above paragraph ('Conclusions up to now') we will report the main conclusions arising from this analysis.
 
 **CONCLUSION UP TO NOW:** 
+
 - we dropped the *minutes variables* because they are *perfectly correlated with the charge variables*; 
+
 - we saw that the *churn rate* is *higher* for customers that have an *international plan*; 
 - we saw that the churn rate is *higher* for customers that do *not have a voice mail plan*; 
+
 - we saw that the churn rate is *higher* for customers that *have a higher number of customer service calls*; 
+
 - we saw that the churn rate is *higher* for customers that *have higher total day minutes and total day charge*; 
+
 - we saw that the churn rate is *higher* for customers that *have higher total eve charge, night charge, and intl charge*; 
+
 - we saw that *State* also *influences the churn rate*;
 
 
@@ -357,7 +363,7 @@ chisq.test(contingency.table)
 
 H0: Region and Churn are independent, H1: Region and Churn are dependent. Since p-value \> 0.05, we fail to reject the null hypothesis, therefore the region does not influence the churn rate. Let's see the distribution of churn by region:
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.align='center'}
 ggplot(data, aes(x = Region, fill = Churn)) + 
   geom_bar(width = 0.7, color = 1) +
   theme_minimal() +
@@ -398,16 +404,14 @@ train.mean <- apply(data.train.balanced[, cols_to_scale], MARGIN = 2, FUN = mean
 train.sd <- apply(data.train.balanced[, cols_to_scale], MARGIN = 2, FUN = sd)
 
 data.train.balanced[, cols_to_scale] <- scale(data.train.balanced[, cols_to_scale], center = train.mean, scale = train.sd)
-# Scale validation data using training data's parameters
 data.val[, cols_to_scale] <- scale(data.val[, cols_to_scale], center = train.mean, scale = train.sd)
 ```
 #### Baseline Logistic Regression Model
 Our starting point is a logistic regression model. We will use this model as a baseline to compare the performance of more complex models:
 ```{r}
 logistic.baseline <- glm(Churn ~ ., data = data.train.balanced, family = "binomial")
-#summary(logistic.baseline)
 ```
-The confusion matrix and the metrics we obtained at the beginning are:
+The baseline model shows decent accuracy at 83.33%, however, precision at 57.89% and recall at 42.04% indicate areas for potential improvement. This is normal since we still have to perform feature selection and regularization to improve the model.
 ```{r, echo=FALSE}
 baseline.pred <- ifelse(predict(logistic.baseline, newdata = data.val) > 0.5, 1, 0)
 (baseline.cm <- table(baseline.pred, data.val$Churn))
@@ -433,6 +437,8 @@ get.metrics<- function(conf.mat) {
 
 (baseline.metrics <- get.metrics(baseline.cm))
 ```
+
+##### AIC and BIC Model Selection
 We performed the **Akaike Information Criterion** (AIC) stepwise selection  to identify the most important predictors in the model:
 ```{r, results='hide'}
 akaike.fw <- step(glm(Churn ~ 1, family = "binomial", data = data.train.balanced), scope = formula(logistic.baseline), direction = "forward")
@@ -450,6 +456,9 @@ bayesian.both <- step(logistic.baseline, direction = "both", k = log(nrow(data.t
 Considering bidirectional elimination of both methods, BIC is more strict as it removes all the covariates representing the regions.
 
 After that we compare the validation set results:
+
+The results show that the model selected by the AIC method performs slightly better than the one selected by the BIC method. The AIC model has a higher accuracy, precision, recall, and F1 score: maybe dropping all the region features as BIC does is too big of a loss of informations.
+
 **AIC**:
 ```{r, echo=FALSE}
 akaike.preds <- ifelse(predict(akaike.both, data.val) > 0.5, 1, 0)
@@ -462,8 +471,6 @@ bayesian.preds <- ifelse(predict(bayesian.both, data.val) > 0.5, 1, 0)
 (bayesian.cm <- table(bayesian.preds, data.val$Churn))
 (bayesian.metrics <- get.metrics(bayesian.cm))
 ```
-The results show that the model selected by the AIC method performs slightly better than the one selected by the BIC method. The AIC model has a higher accuracy, precision, recall, and F1 score: maybe dropping all the region features as BIC does is too big of a loss of informations.
-
 
 #### ROC Curves
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
@@ -485,6 +492,7 @@ par(mfrow = c(1, 1))
 ```
 
 **AUC**:
+In order to insight into the models' ability to evaluate their predictive performance in discerning churn, we're calculating the Area Under the Curve (AUC) for Akaike, Bayesian, and Baseline models.
 ```{r, results='hide', message=FALSE, warning=FALSE}
 auc_akaike <- as.numeric(auc(roc(data.val$Churn, predict(akaike.both, newdata = data.val, type = "response"))))
 auc_bayesian <- as.numeric(auc(roc(data.val$Churn, predict(bayesian.both, newdata = data.val, type = "response"))))
@@ -520,8 +528,11 @@ comparison_df
 ```
 ##### LASSO and RIDGE REGULARIZATION
 We will use LASSO and Ridge regularization to improve the logistic regression model. We will use:
+
 -`glmnet` package to perform the regularization;
+
 - `cv.glmnet` function to perform cross-validation to find the optimal value of the regularization parameter lambda;
+
 - `glmnet` function to fit the model with the optimal lambda value.
 
 **LASSO**:
@@ -601,19 +612,257 @@ ridge_df <- data.frame(Model = "Logistic Ridge",
                        F1_Score = ridge.metrics$F1,
                        AUC = as.numeric(auc.ridge$auc))
 ```
+
+
+
 Now let's compare the metrics obtained with the different models:
 ```{r, echo=FALSE}
 comparison_df <- rbind(comparison_df, ridge_df, lasso_df)
 comparison_df
 ```
 Our baseline logistic regression model demonstrates moderate performance across various metrics:
+
 - following analyses under different approaches, accuracy ranges from 78.54% to 83.69%;
+
 - precision consistently hovers around 76%, indicating a high percentage of correctly predicted positive cases;
+
 - recall is lower, ranging from 36% to 43%, suggesting room for improvement in capturing all positive cases;
-- the F1 score, a balanced metric, varies from 0.49 to 0.50. AUC values, indicating model discrimination, range from 0.73 to 0.83.
+
+- the F1 score, a balanced metric, varies from 0.49 to 0.50. AUC values, indicating model discrimination, range from 0.73 to 0.83;
+
 Overall, the model performs reasonably well but could benefit from increased recall to capture more positive cases.
 
+#### Other models
+
+From now on we are studying other models and comparing the metrics with the logistic regression we chose as baseline model:
+
+- **Decision trees**
+
+- **Random Forest**
+
+- **Gradient Boosting**
+
+
+#### Decision Trees
+First of all we split again to undo the scaling and to make trees more interpretable for us:
+```{r}
+set.seed(1)
+ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = FALSE)
+data.train <- data[ids.train,]
+data.val <- data[-ids.train,] 
+```
+Then we oversampled the minority class in order to have a total of 4260 observations as in the previous case:
+```{r results='hide'}
+data.train.balanced <- ovun.sample(Churn ~ ., data = data.train, method = "over", N=4260)$data
+table(data.train.balanced$Churn)
+```
+```{r echo=FALSE}
+set.seed(1) # otherwise results might be inconsistent due to ties
+tree.full <- tree(Churn ~ ., data = data.train.balanced)
+par(mar=c(5,5,2,2))  # Adjust margin sizes to avoid the "Error in plot.new() : figure margins too large"
+plot(tree.full)
+text(tree.full, pretty = 0, cex = 0.7)
+```
+
+```{r echo=FALSE}
+tree.pred <- predict(tree.full, data.val, type = "class")
+table(tree.pred, data.val$Churn)
+get.metrics(table(tree.pred, data.val$Churn))
+```
+
+##### Pruning the tree
+In order to improve the performance and generalization ability of decision trees (to prevent overfitting) we adopted a Pruning approach with cross-validation:
+
+
+```{r echo=FALSE}
+cv.trees <- cv.tree(tree.full, FUN = prune.misclass)
+#(optimal.size <- cv.trees$size[which.min(cv.trees$dev)])
+par(mfrow = c(1,2))
+plot(cv.trees$size, cv.trees$dev/nrow(data.val), type = "b", xlab = "Size", ylab = "Error")
+plot(cv.trees$k, cv.trees$dev/nrow(data.val), type = "b", col = 3, xlab = "K", ylab = "Error")
+```
+
+After pruning, the resuting tree is the following:
+
+```{r echo=FALSE}
+pruned.tree <- prune.misclass(tree.full, k = 0, best = optimal.size)
+plot(pruned.tree)
+text(pruned.tree, pretty = 0, cex = 0.7)
+```
+
+The predictive performance of the pruned tree is evaluated on the validation dataset, giving as contingency table the below:
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+pruned.pred <- predict(pruned.tree, data.val, type = "class")
+table(pruned.pred, data.val$Churn)
+trees.metrics <- get.metrics(table(pruned.pred, data.val$Churn))
+trees.auc <- roc(data.val$Churn, as.numeric(pruned.pred))
+```
+
+```{r echo=FALSE}
+cv_trees_df <- data.frame(Model = "CV Decision Trees",
+                          Accuracy = trees.metrics$Accuracy,
+                          Precision = trees.metrics$Precision,
+                          Recall = trees.metrics$Recall,
+                          F1_Score = trees.metrics$F1,
+                          AUC = as.numeric(trees.auc$auc))
+```
+#### Random Forest
+
+Now its the turn of the Random Forest model. Using again a seed set for reproducibility, we train the model on a balanced training dataset, configuring parameters such as the number of trees and variable selection for each split (500).
+```{r}
+set.seed(1)
+fit.bag <- randomForest(Churn ~ ., data = data.train.balanced, mtry = ncol(data.train.balanced) - 1, ntree = 500, importance = T) 
+```
+
+```{r echo=FALSE, fig.align='center'}
+layout(matrix(c(1,2),nrow=1),
+       width=c(4,1)) 
+par(mar=c(5,4,4,0)) # No margin right side
+plot(fit.bag, log="y")
+par(mar=c(5,0,4,2)) # No margin left side
+plot(c(0,1),type="n", axes=F, xlab="", ylab="")
+legend("bottom", colnames(fit.bag$err.rate),col=1:4,cex=0.8,fill=1:4)
+```
+
+
+In this section, we evaluate our bagged model's performance on the validation dataset: 
+```{r echo=FALSE, fig.align='center'}
+varImpPlot(fit.bag)
+mean(fit.bag$err.rate[,1])
+validation.preds <- predict(fit.bag, newdata = data.val)
+(bag.missclassification <- mean(validation.preds != data.val$Churn)) 
+table(validation.preds, data.val$Churn)
+```
+```{r echo=FALSE}
+rf.metrics <- get.metrics(table(validation.preds, data.val$Churn))
+rf.auc <- roc(data.val$Churn, as.numeric(validation.preds))
+```
+
+We utilized two metrics for error estimation: Out-of-Bag (OOB) test error, which is approximately 1.33%, and true test error, which is approximately 3.72%. By comparing these figures, we observe that with a larger number of trees, the OOB test error estimation could potentially approach the true test error more closely.
+Additionally, we examine the contingency table of predicted versus actual outcomes, which illustrates the model's performance. For instance, out of 720 instances predicted as 'False', 709 are actually 'False', while out of 114 instances predicted as 'True', 94 are indeed 'True'.
+
+```{r echo=FALSE}
+rf_df <- data.frame(Model = "Random Forests",
+                    Accuracy = rf.metrics$Accuracy,
+                    Precision = rf.metrics$Precision,
+                    Recall = rf.metrics$Recall,
+                    F1_Score = rf.metrics$F1,
+                    AUC = as.numeric(rf.auc$auc))
+```
+
+#### eXtreme Gradient Boosting
+
+We're now using XGBoost to build a churn prediction model.
+First, we'll prepare our data by encoding categorical variables and splitting it into training and validation sets, then, we'll train the XGBoost model with specified parameters.
+
+```{r results='hide', message=FALSE, warning=FALSE}
+X.tr <- model.matrix(Churn ~ ., data = data.train.balanced)[, -1]
+y.tr <- as.numeric(data.train.balanced$Churn)-1
+X.val <- model.matrix(Churn ~ ., data = data.val)[, -1]
+y.val <- as.numeric(data.val$Churn)-1
+fit.xg <- xgboost(as.matrix(X.tr), label = y.tr, nrounds = 50, objective = "binary:logistic", eval_metric = "error")
+```
+As shown from the results below, the **XGBoost** model achieves **strong performance** with a 97% of accuracy, a recall of 93.20% for 'Churn' instances and a precision of 84.21%. It exhibits low rates of false negatives (18 out of 114) and false positives (7 out of 731).
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+xg.pred <- ifelse(predict(fit.xg, X.val)> 0.5, 1, 0)
+table(xg.pred, data.val$Churn)
+get.metrics(table(xg.pred, data.val$Churn))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+train.errors <- fit.xg$evaluation_log$train_error
+val.errors <- numeric(50)
+
+for (i in 1:50) {
+  pred_i = ifelse(predict(fit.xg, X.val, ntreelimit = i) > 0.5, 1, 0)
+  val.errors[i] = mean(pred_i != y.val)
+} 
+
+plot(1:50, val.errors, type="b", xlab="number of trees", ylab="error", col=3, ylim = c(0,0.3))
+points(1:50, train.errors, type="b")
+legend("topright", legend = c("Train", "Test"), col=c(1, 3), lty=1, lwd=2, cex = 1)
+#which.min(val.errors)
+abline(v = which.min(val.errors))
+```
+```{r echo=FALSE, results='hide', warning=FALSE, message=FALSE}
+(feature.importance <- xgb.importance(model = fit.xg))
+```
+##### Feature Importance
+```{r, echo=FALSE, fig.align='center', warning=FALSE, message=FALSE}
+xgb.plot.importance(importance_matrix = feature.importance)
+```
+Notably, **total day minutes, customer service calls, and the presence of an international plan emerge as the top features**, indicating their significant influence on customer churn. Other factors such as evening and international call durations also contribute to the model's predictive power, albeit to a lesser extent. 
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+fitControl = trainControl(
+  method = "cv",
+  number = 10, 
+  search="random")
+
+tune_grid = 
+  expand.grid(
+    nrounds = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+    eta = 0.3,
+    max_depth=5,
+    subsample = 1,
+    colsample_bytree = 1,
+    min_child_weight = 5,
+    gamma = c(0.1, 0.2, 0.5, 0.75, 1)
+  )
+
+set.seed(1)
+fit_xg_cv = train(Churn ~ ., data = data.train.balanced, 
+                  method = "xgbTree", 
+                  trControl = fitControl,
+                  verbose = FALSE, 
+                  tuneGrid = tune_grid,
+                  objective = "binary:logistic", 
+                  eval_metric = "error")
+```
+ Here we can see from the confusion matrix that the model has a good performance, but if compared to the matrix shown at the beginning of the section, we can see that the model improved in the prediction of true positives (96 before, 98 now), but has a slightly worse performance in predicting true negatives (713 before, 707 now).
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+pred_xg_cv = predict(fit_xg_cv, data.val, type="raw")
+#mean(pred_xg_cv != data.val$Churn)
+table(pred_xg_cv, data.val$Churn)
+xgb.metrics <- get.metrics(table(pred_xg_cv, data.val$Churn))
+
+auc.xgb <- roc(data.val$Churn, as.numeric(pred_xg_cv))
+
+xgb_df <- data.frame(Model = "CV XGB",
+                     Accuracy = xgb.metrics$Accuracy,
+                     Precision = xgb.metrics$Precision,
+                     Recall = xgb.metrics$Recall,
+                     F1_Score = xgb.metrics$F1,
+                     AUC = as.numeric(auc.xgb$auc))
+```
+
+
+
 ### Main conclusions
+
+#### Main conclusions
+
+To sum up, we have performed a comprehensive analysis of the churn dataset, including data exploration, preprocessing, and feature engineering. We have built a logistic regression model as a baseline and compared its performance with other models, such as decision trees, random forests, and gradient boosting. 
+
+```{r, echo=FALSE}
+comparison_df <- rbind(comparison_df, cv_trees_df)
+comparison_df <- rbind(comparison_df, rf_df)
+comparison_df <- rbind(comparison_df, xgb_df)
+comparison_df
+```
+
+Now to draw the main conclusions from our analysis let's compare the metrics obtained with the different models' final data:
+
+-  **Best classification model**: Random Forests demonstrate the best overall performance, with an accuracy of 96.64%, precision of 81.58%, recall of 93.00%, F1-score of 86.92%, and area under the curve (AUC) of 90.30%. This indicates that Random Forests is the most effective model in predicting churn.
+
+-  **Boosting models**: CV XGBoost shows an accuracy of 96.52%, precision of 85.96%, recall of 88.29%, F1-score of 87.11%, and AUC of 92.08%, demonstrating performance similar to Random Forests and superior to other classification models.
+
+-  **Linear models**: Linear models (Akaike, Bayesian, Full Logistic, Logistic Ridge, Logistic Lasso) exhibit lower performance compared to boosting models and decision trees, with AUC ranging from 72.63% to 83.44%. However, Logistic Ridge and Logistic Lasso show notably higher precision compared to other linear models.
+
+-  **Decision trees**: CV Decision Trees demonstrate good performance with an accuracy of 90.05%, precision of 87.72%, recall of 59.17%, F1-score of 70.67%, and AUC of 89.07%, but are surpassed by boosting models and Random Forests in terms of AUC.
+
+In conclusion, **Random Forests and CV XGBoost emerge as the most effective models** for churn prediction, with Random Forests showing slightly better performance in terms of AUC.
+
 
 ## Task 2 {.tabset}
 
@@ -624,3 +873,4 @@ Cluster customers according to their behavior
 ### Kmeans
 
 ### Hierarchical Clustering
+
