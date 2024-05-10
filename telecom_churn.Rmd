@@ -713,7 +713,7 @@ plot(cv.trees$size, cv.trees$dev/nrow(data.val), type = "b", xlab = "Size", ylab
 plot(cv.trees$k, cv.trees$dev/nrow(data.val), type = "b", col = 3, xlab = "K", ylab = "Error")
 ```
 
-After pruning, the resuting tree is the following:
+After pruning, the resulting tree is the following (there are some small differences with respect to the previous tree):
 
 ```{r echo=FALSE}
 pruned.tree <- prune.misclass(tree.full, k = 0, best = optimal.size)
@@ -730,7 +730,7 @@ trees.metrics <- get.metrics(table(pruned.pred, data.val$Churn))
 trees.auc <- roc(data.val$Churn, as.numeric(pruned.pred))
 ```
 
-These values inside the contingency table show that the pruned tree model are exactly the same as the full tree model, which is a good sign of the model's robustness.
+These values inside the contingency table show that the pruned tree model are exactly the same as the full tree model, even if the structure of the tree changed, which is a good sign of the model's robustness.
 
 ```{r echo=FALSE}
 cv_trees_df <- data.frame(Model = "CV Decision Trees",
@@ -760,9 +760,9 @@ plot(c(0,1),type="n", axes=F, xlab="", ylab="")
 legend("bottom", colnames(fit.bag$err.rate),col=1:4,cex=0.8,fill=1:4)
 ```
 
-In this section, we evaluate our bagged model's performance on the validation dataset:
+In this section, we evaluate our bagged model's performance on the validation dataset. Our aim with this plot is to illustrate the importance of each predictor variable in the random forest model. At the top of our results we find 'Customer service calls', 'International plan', 'Total international calls'.
 
-```{r echo=FALSE, fig.align='center'}
+```{r echo=FALSE, fig.align='center', message=FALSE}
 varImpPlot(fit.bag)
 mean(fit.bag$err.rate[,1])
 validation.preds <- predict(fit.bag, newdata = data.val)
@@ -770,12 +770,12 @@ validation.preds <- predict(fit.bag, newdata = data.val)
 table(validation.preds, data.val$Churn)
 ```
 
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE}
 rf.metrics <- get.metrics(table(validation.preds, data.val$Churn))
 rf.auc <- roc(data.val$Churn, as.numeric(validation.preds))
 ```
 
-We utilized two metrics for error estimation: Out-of-Bag (OOB) test error, which is approximately 1.33%, and true test error, which is approximately 3.72%. By comparing these figures, we observe that with a larger number of trees, the OOB test error estimation could potentially approach the true test error more closely. Additionally, we examine the contingency table of predicted versus actual outcomes, which illustrates the model's performance. For instance, out of 720 instances predicted as 'False', 709 are actually 'False', while out of 114 instances predicted as 'True', 94 are indeed 'True'.
+We utilized two metrics for error estimation: **Out-of-Bag (OOB) test error**, which is approximately **1.33%**, and **true test erro**r, which is approximately **3.72%**. By comparing these figures, we observe that with a larger number of trees, the OOB test error estimation could potentially approach the true test error more closely. Additionally, we examine the contingency table of predicted versus actual outcomes, which illustrates the model's performance. For instance, out of 720 instances predicted as 'False', 709 are actually 'False', while out of 114 instances predicted as 'True', 94 are indeed 'True'.
 
 ```{r echo=FALSE}
 rf_df <- data.frame(Model = "Random Forests",
