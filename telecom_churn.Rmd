@@ -446,6 +446,7 @@ bayesian.both <- step(logistic.baseline, direction = "both", k = log(nrow(data.t
 Considering bidirectional elimination of both methods, BIC is more strict as it removes all the covariates representing the regions.
 
 After that we compare the validation set results:
+
 **AIC**:
 ```{r, echo=FALSE}
 akaike.preds <- ifelse(predict(akaike.both, data.val) > 0.5, 1, 0)
@@ -597,17 +598,110 @@ ridge_df <- data.frame(Model = "Logistic Ridge",
                        F1_Score = ridge.metrics$F1,
                        AUC = as.numeric(auc.ridge$auc))
 ```
+
+
 Now let's compare the metrics obtained with the different models:
 ```{r, echo=FALSE}
 comparison_df <- rbind(comparison_df, ridge_df, lasso_df)
 comparison_df
 ```
 Our baseline logistic regression model demonstrates moderate performance across various metrics:
+
 - following analyses under different approaches, accuracy ranges from 78.54% to 83.69%;
+
 - precision consistently hovers around 76%, indicating a high percentage of correctly predicted positive cases;
+
 - recall is lower, ranging from 36% to 43%, suggesting room for improvement in capturing all positive cases;
-- the F1 score, a balanced metric, varies from 0.49 to 0.50. AUC values, indicating model discrimination, range from 0.73 to 0.83.
+
+- the F1 score, a balanced metric, varies from 0.49 to 0.50. AUC values, indicating model discrimination, range from 0.73 to 0.83;
+
 Overall, the model performs reasonably well but could benefit from increased recall to capture more positive cases.
+
+.
+
+From now on we are studying other models and comparing the metrics with the logistic regression we chose as baseline model:
+
+- **Decision trees**
+
+- **Random Forest**
+
+- **Gradient Boosting**
+
+#### Decision Trees
+First of all we split again to undo the scaling and to make trees more interpretable for us:
+```{r}
+set.seed(1)
+ids.train <- sample(1:nrow(data), size = 0.75 * nrow(data), replace = FALSE)
+data.train <- data[ids.train,]
+data.val <- data[-ids.train,] 
+```
+Then we oversampled the minority class in order to have a total of 4260 observations as in the previous case:
+```{r results='hide'}
+data.train.balanced <- ovun.sample(Churn ~ ., data = data.train, method = "over", N=4260)$data
+table(data.train.balanced$Churn)
+```
+```{r echo=FALSE}
+set.seed(1) # otherwise results might be inconsistent due to ties
+tree.full <- tree(Churn ~ ., data = data.train.balanced)
+par(mar=c(5,5,2,2))  # Adjust margin sizes to avoid the "Error in plot.new() : figure margins too large"
+plot(tree.full)
+text(tree.full, pretty = 0, cex = 0.7)
+```
+
+```{r echo=FALSE}
+tree.pred <- predict(tree.full, data.val, type = "class")
+table(tree.pred, data.val$Churn)
+get.metrics(table(tree.pred, data.val$Churn))
+```
+
+In order to improve the performance and generalization ability of decision trees (to prevent overfitting) we adopted a Pruning approach with cross-validation:
+```{r echo=FALSE}
+cv.trees <- cv.tree(tree.full, FUN = prune.misclass)
+(optimal.size <- cv.trees$size[which.min(cv.trees$dev)])
+par(mfrow = c(1,2))
+plot(cv.trees$size, cv.trees$dev/nrow(data.val), type = "b", xlab = "Size", ylab = "Error")
+plot(cv.trees$k, cv.trees$dev/nrow(data.val), type = "b", col = 3, xlab = "K", ylab = "Error")
+```
+
+Our pruned tree:
+```{r echo=FALSE}
+plot(pruned.tree)
+text(pruned.tree, pretty = 0, cex = 0.7)
+```
+
+After pruning the performance became:
+```{r echo=FALSE}
+pruned.pred <- predict(pruned.tree, data.val, type = "class")
+table(pruned.pred, data.val$Churn)
+trees.metrics <- get.metrics(table(pruned.pred, data.val$Churn))
+trees.auc <- roc(data.val$Churn, as.numeric(pruned.pred))
+```
+#### Random Forest
+```{r}
+set.seed(1)
+fit.bag <- randomForest(Churn ~ ., data = data.train.balanced, mtry = ncol(data.train.balanced) - 1, ntree = 500, importance = T) 
+```
+
+```{r echo=FALSE}
+layout(matrix(c(1,2),nrow=1),
+       width=c(4,1)) 
+par(mar=c(5,4,4,0)) # No margin right side
+plot(fit.bag, log="y")
+par(mar=c(5,0,4,2)) # No margin left side
+plot(c(0,1),type="n", axes=F, xlab="", ylab="")
+legend("bottom", colnames(fit.bag$err.rate),col=1:4,cex=0.8,fill=1:4)
+```
+
+```{r echo=FALSE}
+varImpPlot(fit.bag)
+mean(fit.bag$err.rate[,1]) # OOB test error estimation
+```
+
+
+
+
+#### Gradient Boosting
+
 
 ### Main conclusions
 

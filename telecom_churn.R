@@ -945,6 +945,8 @@ table(data.train.balanced$Churn)
 
 set.seed(1) # otherwise results might be inconsistent due to ties
 tree.full <- tree(Churn ~ ., data = data.train.balanced)
+par(mar=c(5,5,2,2))  # Adjust margin sizes to avoid the "Error in plot.new() : figure margins too large"
+
 plot(tree.full)
 text(tree.full, pretty = 0, cex = 0.7)
 
