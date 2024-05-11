@@ -1,6 +1,5 @@
 ---
 title: "Data Analysis for Business - Final Project"
-author: Edoardo Cocciò, Alexandra Tabarani, Marta Torella, Simone Filosofi
 output:
   html_document: default
 ---
@@ -70,12 +69,13 @@ categorical_vars <- data[, sapply(data, is.factor) & !names(data) %in% "Churn"]
 
 #### Missing Values and Duplicates
 
-A crucial step in the data analysis process is to check for missing values and duplicates in the dataset to ensure that the data is clean and ready for analysis; in our case we have no missing values and no duplicates. After ensuring dataset integrity, we proceed with the analysis.
-
-```{r echo=FALSE, results='hide'}
-sum(is.na(data))
+```{r}
+skim(data)
 anyDuplicated(data)
 ```
+
+A crucial step in the data analysis process is to check for missing values and duplicates in the dataset to ensure that the data is clean and ready for analysis; in our case we have no missing values and no duplicates. After ensuring dataset integrity, we proceed with the analysis.
+
 
 #### Univariate and Bivariate Analysis
 
@@ -92,7 +92,7 @@ ggplot(churn_percent, aes(x = "", y = Percent, fill = Churn)) +
   geom_col(width = 1, color = 1) +
   coord_polar("y", start = 0) +
   theme_void() +
-  scale_fill_manual(values = c("False" = "#dab0ff", "True" = "#ADD8E6"), labels = c("False" = "No", "True" = "Yes")) +
+  scale_fill_manual(values = c("False" = "#15aabf", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
   labs(title = "Percentage of Churn", fill = "Churn") +
   geom_text(aes(label = paste0(round(Percent, 1), "%")), position = position_stack(vjust = 0.5)) +
   theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18))
@@ -186,9 +186,9 @@ Since the p-value = 5.151e-09 < 0.05, we reject the null hypothesis; therefore t
 
 Lastly, we investigate the relationship between the **International.plan** variable and the target variable **Churn**:
 
-H0: the average churn rate is the same for customers who have a voice mail plan and those who do not
+H0: the average churn rate is the same for customers who have an international plan and those who do not
 
-H1: the average churn rate is different for customers who have a voice mail plan and those who do not
+H1: the average churn rate is different for customers who have an international plan and those who do not
 
 ```{r}
 chisq.test(data$International.plan, data$Churn)
@@ -198,7 +198,7 @@ The p-value is less than 2.2e-16, indicating a statistically significant associa
 
 To conclude, for the the analysis of categorical variables, we also analysed the distribution of the **State** variable; the below plot shows the distribution of customers across different states in the US.
 
-```{r message=FALSE, warning=FALSE, echo=FALSE, fig.align='center', fig.show='hold'}
+```{r echo=FALSE}
 us_map <- map_data("state") %>% 
   as_tibble()
 
@@ -229,6 +229,9 @@ state_names <- c(KS = "kansas", OH = "ohio", NJ = "new jersey", OK = "oklahoma",
                  WA = "washington", NM = "new mexico", NV = "nevada", DC = "district of columbia",
                  KY = "kentucky", ME = "maine", MS = "mississippi", TN = "tennessee",
                  PA = "pennsylvania", CT = "connecticut", ND = "north dakota")
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE, fig.align='center', fig.show='hold'}
 
 churn.tbl <- data %>% select(State, Churn) %>%
   group_by(State) %>%
@@ -309,7 +312,12 @@ corrplot(
 )
 ```
 
-The correlation matrix shows that there is a **perfect correlation between the charge variables and minutes variables** so we can drop all the minutes one **we drop Total.day.minutes, Total.eve.minutes, Total.night.minutes, Total.intl.minutes**.
+The correlation matrix shows that there is a **perfect correlation between the charge variables and minutes variables** so we can drop all the minutes one: **Total.day.minutes, Total.eve.minutes, Total.night.minutes, Total.intl.minutes**.
+
+```{r echo=FALSE}
+data <- data %>%
+  select(-c(Total.day.minutes, Total.eve.minutes, Total.night.minutes, Total.intl.minutes))
+```
 
 ### Lower-dimensional models
 
@@ -352,7 +360,7 @@ summary(model)
 
 The output shows a logistic regression analysis where the likelihood of customer churn increases significantly with each additional customer service call, as indicated by the positive coefficient of 0.39617 (p \< 2e-16). The model fits the data reasonably with an AIC of 2631.2, suggesting that customer service calls are a relevant predictor of churn. Moreover, the intercept's p-value (\<2e-16) suggests that there is a statistically significant effect of having zero customer service calls on the likelihood of churn and that there is a statistically significant association between the number of customer service calls and an increased likelihood of churn.
 
-```{r, echo=FALSE, fig.align='center', message=FALSE, warning=FALSE}
+```{r, echo=FALSE, fig.align='center', message=FALSE, warning=FALSE, results='hide'}
 call_range <- seq(min(data$Customer.service.calls, na.rm = TRUE), 
                   max(data$Customer.service.calls, na.rm = TRUE), 
                   length.out = 100)
@@ -481,7 +489,7 @@ Both International.planYes and Customer.service.calls are highly significant. Th
 
 ### Preprocessing and feature engineering
 
-We should first deal with the 51 states: we can group them by region (north, south, east, west).
+In proceeding our analysis we should first deal with the 51 states: we can group them by region; mid west, north east, south east, south west, west.
 
 ```{r, echo=FALSE}
 map_region <- function(state) {
@@ -522,7 +530,9 @@ contingency.table <- table(data$Region, data$Churn)
 chisq.test(contingency.table)
 ```
 
-H0: Region and Churn are independent, H1: Region and Churn are dependent. Since p-value \> 0.05, we fail to reject the null hypothesis, therefore the region does not influence the churn rate. Let's see the distribution of churn by region:
+H0: Region and Churn are independent, H1: Region and Churn are dependent. 
+Since p-value \> 0.05, we fail to reject the null hypothesis, therefore the region does not influence the churn rate as the State variable did. 
+Let's see the distribution of churn by region:
 
 ```{r, echo=FALSE, fig.align='center'}
 ggplot(data, aes(x = Region, fill = Churn)) + 
@@ -540,7 +550,7 @@ ggplot(data, aes(x = Region, fill = Churn)) +
   scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) 
 ```
 
-We can see that the churn rate is not influenced by the region.
+We can see, also from the plot, that the churn rate is not influenced by the region.
 
 #### Splitting the data and scaling
 
@@ -551,7 +561,7 @@ data.train <- data[ids.train,]
 data.val <- data[-ids.train,] 
 ```
 
-We oversample the minority class to balance the dataset, now we have 4260 total observations.
+We oversample the minority class to balance the dataset, and as a result now we have 4260 total observations.
 
 ```{r}
 data.train.balanced <- ovun.sample(Churn ~ ., data = data.train, method = "over", N=4260)$data
@@ -572,13 +582,13 @@ data.val[, cols_to_scale] <- scale(data.val[, cols_to_scale], center = train.mea
 
 #### Baseline Logistic Regression Model
 
-Our starting point is a logistic regression model. We will use this model as a baseline to compare the performance of more complex models:
+It is finally time to start the analysis with the full model. We'll begin by employing a logistic regression model as our baseline. This approach is straightforward and effective for predicting binary outcomes, which makes it an ideal starting point. By using logistic regression as our benchmark, we can clearly assess the performance improvements offered by more complex models. As we proceed, we'll compare this baseline model's accuracy against more sophisticated algorithms to determine whether the increased complexity justifies the potential gains in prediction accuracy. This step-by-step comparison helps us identify which models enhance our analytical capabilities and which may not be worth the additional complexity.
 
 ```{r}
 logistic.baseline <- glm(Churn ~ ., data = data.train.balanced, family = "binomial")
 ```
 
-The baseline model shows decent accuracy at 83.33%, however, precision at 57.89% and recall at 42.04% indicate areas for potential improvement. This is normal since we still have to perform feature selection and regularization to improve the model.
+Our baseline logistic regression model effectively captures the main trends affecting customer churn, highlighting the significant roles played by factors like international plans, voicemail services, and customer service calls. The model’s performance is pretty decent with an accuracy of 83.69%, although its precision at 59.69% and recall at 43.08% suggest there’s room for improvement, especially in correctly identifying all actual cases of churn. The F1 score of 0.5 indicates that the balance between precision and recall could be better. This is normal since we still have to perform feature selection and regularization to improve the model.
 
 ```{r, echo=FALSE}
 baseline.pred <- ifelse(predict(logistic.baseline, newdata = data.val) > 0.5, 1, 0)
@@ -606,7 +616,8 @@ get.metrics<- function(conf.mat) {
 (baseline.metrics <- get.metrics(baseline.cm))
 ```
 
-##### AIC and BIC Model Selection
+#### AIC and BIC Model Selection
+We'll now proceed with further refining our model by conducting AIC (Akaike Information Criterion) and BIC (Bayesian Information Criterion) analysis. 
 
 We performed the **Akaike Information Criterion** (AIC) stepwise selection to identify the most important predictors in the model:
 
@@ -616,7 +627,7 @@ akaike.back <- step(logistic.baseline, direction = "backward")
 akaike.both <- step(logistic.baseline, direction = "both")
 ```
 
-Across all selection methods, certain predictors consistently appear as significant: "International.plan", "Customer.service.calls", "Total.day.charge" and "Voice.mail.plan".
+The AIC analysis results highlight how each variable affects the model's complexity and fit. For example, variables like `Total.day.charge` and `International.plan` show a substantial increase in the AIC when removed, indicating they are highly significant to the model's accuracy. Conversely, variables like `Account.length` and `Area.code` have minimal impact on AIC, suggesting they contribute less to model performance. 
 
 **Bayesian Information criterion** (BIC) is another criterion to select the best model. We will use the BIC to compare the models selected by the AIC:
 
@@ -626,7 +637,7 @@ bayesian.back <- step(logistic.baseline, direction = "backward", k = log(nrow(da
 bayesian.both <- step(logistic.baseline, direction = "both", k = log(nrow(data.train.balanced)))
 ```
 
-Considering bidirectional elimination of both methods, BIC is more strict as it removes all the covariates representing the regions.
+Considering bidirectional elimination of both methods, BIC is more stringent than AIC: it removes all region-related variables, favoring a simpler model. This stricter approach by BIC contrasts with AIC's tendency to keep more variables for a better fit. 
 
 After that we compare the validation set results:
 
@@ -674,9 +685,8 @@ roc_bayesian <- roc(data.val$Churn, predict(bayesian.both, newdata = data.val, t
 par(mfrow = c(1, 1))
 ```
 
-**AUC**: In order to insight into the models' ability to evaluate their predictive performance in discerning churn, we're calculating the Area Under the Curve (AUC) for Akaike, Bayesian, and Baseline models.
 
-```{r, results='hide', message=FALSE, warning=FALSE}
+```{r, echo=FALSE, results='hide'}
 auc_akaike <- as.numeric(auc(roc(data.val$Churn, predict(akaike.both, newdata = data.val, type = "response"))))
 auc_bayesian <- as.numeric(auc(roc(data.val$Churn, predict(bayesian.both, newdata = data.val, type = "response"))))
 auc_full <- as.numeric(auc(roc(data.val$Churn, baseline.pred)))
@@ -710,15 +720,15 @@ comparison_df <- bind_rows(akaike_df, bayesian_df, full_df)
 comparison_df
 ```
 
-##### LASSO and RIDGE REGULARIZATION
+#### LASSO and RIDGE REGULARIZATION
 
-We leverage both LASSO and Ridge regularization methods to fine-tune our logistic regression model, aiming to enhance its predictive capabilities while addressing potential multicollinearity and feature redundancy.
+We are now exploring Lasso and Ridge regression techniques. Lasso (Least Absolute Shrinkage and Selection Operator) helps in enhancing model accuracy and interpretability by reducing less important features to zero. Ridge regression, on the other hand, minimizes the influence of less important features through shrinkage but keeps all variables in the model. 
+
+We decided to leverage both LASSO and Ridge regularization methods to fine-tune our logistic regression model, aiming to enhance its predictive capabilities while addressing potential multicollinearity and feature redundancy.
 
 **LASSO**:
 
-After tuning over a grid of parameters, the highest achieved accuracy is 77.42%. The optimal regularization parameters selected are alpha = 1 and lambda = 0, indicating LASSO regularization without penalty.
-
-```{r echo=FALSE}
+```{r}
 set.seed(1)
 ctrl <- trainControl(method = "cv", number = 10)
 lasso <- train(Churn ~ ., data = data.train.balanced, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 0.15, length = 30)))
@@ -729,6 +739,8 @@ lasso.predict <- predict(lasso, data.val)
 lasso.cm <- table(lasso.predict, data.val$Churn)
 lasso.metrics <- get.metrics(lasso.cm)
 ```
+
+After tuning over a grid of parameters, the highest achieved accuracy is 77.42%. The optimal regularization parameters selected are alpha = 1 and lambda = 0, indicating LASSO regularization without penalty.
 
 ```{r, echo=FALSE}
 lasso.plot <- lasso %>% 
@@ -746,9 +758,8 @@ lasso.plot <- lasso %>%
 
 **RIDGE**:
 
-Using the Ridge regularization technique with the glmnet method and cross-validation, we achieved a maximum accuracy of 77.07%. The best-performing parameters selected are alpha = 0 and lambda = 0.01034, indicating Ridge regularization without penalty.
 
-```{r echo=FALSE}
+```{r}
 set.seed(1)
 ridge <- train(Churn ~ ., data = data.train.balanced, method = "glmnet", metric = "Accuracy", trControl = ctrl, tuneGrid = expand.grid(alpha = 0, lambda = seq(0, 0.15, length = 30)))
 max(ridge$results$Accuracy)
@@ -758,6 +769,8 @@ ridge.predict <- predict(ridge, data.val)
 ridge.cm <- table(ridge.predict, data.val$Churn)
 ridge.metrics <- get.metrics(ridge.cm)
 ```
+
+Using the Ridge regularization technique with the glmnet method and cross-validation, we achieved a maximum accuracy of 77.07%. The best-performing parameters selected are alpha = 0 and lambda = 0.01034, indicating Ridge regularization almost without penalty.
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -785,9 +798,10 @@ auc.ridge <- roc(data.val$Churn, as.numeric(ridge.predict),
                  auc.polygon = TRUE, print.auc = TRUE)
 ```
 
-As shown in the above plots, the AUC for the Lasso model is 0.778, while the AUC for the Ridge model is 0.776.
+As shown in the above plots, the AUC for the Lasso model is 0.778, while the AUC for the Ridge model is 0.776. Both models demonstrate good discrimination ability, with the Lasso model slightly outperforming the Ridge model.
 
-```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.align='center'}}
 grid.arrange(lasso.plot, ridge.plot, top = "Penalized Approaches for Logistic Regression")
 
 lasso_df <- data.frame(Model = "Logistic Lasso",
@@ -805,6 +819,8 @@ ridge_df <- data.frame(Model = "Logistic Ridge",
                        AUC = as.numeric(auc.ridge$auc))
 ```
 
+The above plots illustrate how the accuracy of logistic regression models changes with different lambda values for Lasso and Ridge regularization techniques. In the Lasso plot, accuracy starts high at 0.766 and gradually decreases to 0.723 as lambda increases. Meanwhile, the Ridge plot shows a more consistent accuracy around 0.77, with minor fluctuations, indicating stable performance across various penalty strengths.
+
 Now let's compare the metrics obtained with the different models:
 
 ```{r, echo=FALSE}
@@ -812,19 +828,9 @@ comparison_df <- rbind(comparison_df, ridge_df, lasso_df)
 comparison_df
 ```
 
-Our baseline logistic regression model demonstrates moderate performance across various metrics:
+Akaike stands out with the highest accuracy at approximately 83.69% and also shows the best overall metric results, indicating strong model performance across multiple evaluation criteria. Other models, such as Bayesian and Full Logistic, offer competitive but slightly lower scores in accuracy and other metrics. Logistic Ridge and Logistic Lasso have notably lower accuracies but higher precision values, which might make them preferable in scenarios where the cost of false positives is high. 
 
--   following analyses under different approaches, accuracy ranges from 78.54% to 83.69%;
-
--   precision consistently hovers around 76%, indicating a high percentage of correctly predicted positive cases;
-
--   recall is lower, ranging from 36% to 43%, suggesting room for improvement in capturing all positive cases;
-
--   the F1 score, a balanced metric, varies from 0.49 to 0.50. AUC values, indicating model discrimination, range from 0.73 to 0.83;
-
-Overall, the model performs reasonably well but could benefit from increased recall to capture more positive cases.
-
-#### Other models
+#### TREES
 
 From now on we are studying other models and comparing the metrics with the logistic regression we chose as baseline model:
 
@@ -832,7 +838,7 @@ From now on we are studying other models and comparing the metrics with the logi
 
 -   **Random Forest**
 
--   **Gradient Boosting**
+-   **XGBOOST**
 
 #### Decision Trees
 
@@ -953,7 +959,7 @@ rf_df <- data.frame(Model = "Random Forests",
                     AUC = as.numeric(rf.auc$auc))
 ```
 
-#### eXtreme Gradient Boosting
+#### XGBOOST
 
 We're now using XGBoost to build a churn prediction model. First, we'll prepare our data by encoding categorical variables and splitting it into training and validation sets, then, we'll train the XGBoost model with specified parameters.
 
