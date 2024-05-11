@@ -77,7 +77,7 @@ sum(is.na(data))
 anyDuplicated(data)
 ```
 
-#### Univariate Analysis
+#### Univariate and Bivariate Analysis
 
 We proceed by conducting an univariate analysis of the variables in our dataset: our first step is to check the distribution of the target variable 'Churn'; indeed, we identified the variable 'Churn' as the target of our analysis since, as previously stated, the goal of our first task is to build a model to predict customer churn. As shown by the below pie chart,the distribution of the target variable is unbalanced, with 85.5% of the customers not churning and 14.5% churning.
 
@@ -147,9 +147,58 @@ ggplot(long_data, aes(x = Value, fill = Value)) +
 
 ```
 
-To conclude the analysis of the categorical variables, we also analysed the distribution of the **State** variable; the below plot shows the distribution of customers across different states in the US.
+Now we decided to further investigate the relationship between the **Customer.service.calls** variable and the target variable **Churn**. The below graph seems to confirm our initial intuition: the churn rate increases as the number of customer service calls increases. The graph illustrates that most customers who do not churn typically make few customer service calls, peaking at 0-1 calls and then sharply decreasing. Conversely, churn rates are initially low and remain steady, even as the number of calls increases, suggesting that those who make more than five calls are less likely to churn. 
 
-```{r message=FALSE, warning=FALSE}
+```{r, echo=FALSE, fig.align='center', fig.width=10, fig.height=5}
+data %>%
+  group_by(Customer.service.calls, Churn) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  ggplot(aes(x = Customer.service.calls, y = Count, color = Churn)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Churn by Customer Service Calls", x = "Customer Service Calls", y = "Count", color = "Churn") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+To further prove our hypothesis, we decided to perform the hypothesis testing to determine if the number of customer service calls is associated with the churn rate:
+
+H0: the average number of customer service calls is the same for customers who churned and those who did not
+
+H1: the average number of customer service calls is different for customers who churned and those who did not
+
+```{r, warning=FALSE, message=FALSE}
+chisq.test(data$Customer.service.calls, data$Churn)
+```
+Since the p-value < 0.05, we reject the null hypothesis; therefore the average number of customer service calls is different for customers who churned and those who did not, which confirms our first assumption.
+
+We now proceed with some more hypothesis testing: we explore the relationship between the **Voice.mail.plan** variable and the target variable **Churn**:
+
+H0: the average churn rate is the same for customers who have a voice mail plan and those who do not
+
+H1: the average churn rate is different for customers who have a voice mail plan and those who do not
+
+```{r, warning=FALSE, message=FALSE}
+chisq.test(data$Voice.mail.plan, data$Churn)
+```
+
+Since the p-value = 5.151e-09 < 0.05, we reject the null hypothesis; therefore the average churn rate is different for customers who have a voice mail plan and those who do not. Hence we reject the null hypothesis, confirming that the average churn rate is different for customers who have a voice mail plan compared to those who do not.
+
+Lastly, we investigate the relationship between the **International.plan** variable and the target variable **Churn**:
+
+H0: the average churn rate is the same for customers who have a voice mail plan and those who do not
+
+H1: the average churn rate is different for customers who have a voice mail plan and those who do not
+
+```{r}
+chisq.test(data$International.plan, data$Churn)
+```
+
+The p-value is less than 2.2e-16, indicating a statistically significant association between having an international plan and customer churn. Therefore, we reject the null hypothesis, confirming that the average churn rate is different for customers who have an international plan compared to those who do not.
+
+To conclude, for the the analysis of categorical variables, we also analysed the distribution of the **State** variable; the below plot shows the distribution of customers across different states in the US.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE, fig.align='center', fig.show='hold'}
 us_map <- map_data("state") %>% 
   as_tibble()
 
@@ -231,7 +280,7 @@ churn.tbl %>%
   ) 
 ```
 
-#### Hypothesis testing
+The above map displaying churn rates across US states reveals significant regional variations, with higher churn rates observed particularly in Western states like California and Arizona, as well as Southern states such as Texas and Florida. These patterns suggest potential market opportunities for businesses to implement targeted customer retention strategies or competitive market entries. Lower churn rates in other states could indicate effective localized strategies or stronger customer loyalty, serving as benchmarks for regions with higher churn rates. By understanding these geographic differences, companies can tailor their approaches to enhance customer satisfaction and retention, adjust their marketing strategies, and set realistic performance benchmarks tailored to regional market dynamics.
 
 #### Correlation analysis
 

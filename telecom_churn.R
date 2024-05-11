@@ -514,7 +514,7 @@ minority_count <- sum(data$Churn == 'True')
 sampled_indices <- sample(majority_indices, size = minority_count, replace = FALSE)
 balanced_data <- data[c(sampled_indices, which(data$Churn == 'True')), ]
 
-levels(data$Churn) # original levels --> i needed this step since i was getting some errors due to the factorization
+levels(data$Churn) 
 balanced_data$Churn <- as.factor(balanced_data$Churn)
 levels(balanced_data$Churn)
 
@@ -566,86 +566,8 @@ confusion.mat <- function(data, model, target, threshold) {
 confusion.mat(data, model, "Churn", 0.5) #Predictions on unbalanced data
 confusion.mat(balanced_data,balanced_model, "Churn", 0.5) # Predictions on balanced data
 
-### we further proceed with other relationships between predictors
-set.seed(1)
-data$Churn <- as.factor(data$Churn)
-model <- glm(Churn ~ Customer.service.calls, family = binomial, data = data)
-summary(model)
-
-call_range <- seq(min(data$Customer.service.calls, na.rm = TRUE), 
-                  max(data$Customer.service.calls, na.rm = TRUE), 
-                  length.out = 100)
-newdata <- data.frame(Customer.service.calls = call_range)
-newdata$Probability <- predict(model, newdata = newdata, type = "response")
-newdata$Odds <- newdata$Probability / (1 - newdata$Probability)
-head(newdata)
-
-
-# plotting the probability of churn based on customer service calls
-ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
-  geom_line() + 
-  labs(title = "Effect of Customer Service Calls on the Probability of Churn",
-       x = "Number of Customer Service Calls",
-       y = "Probability of Churn") +
-  scale_y_continuous(labels = scales::percent_format()) +  # Convert y-axis into percentage format
-  theme_minimal() +  # Use a minimal theme
-  geom_hline(yintercept = 0.5, colour = "red", linetype = "dashed")
-theme(
-  plot.title = element_text(hjust = 0.5), 
-  axis.text.x = element_text(angle = 45, hjust = 1), 
-  axis.title.x = element_text(face = "bold"),  
-  axis.title.y = element_text(face = "bold")  
-)
-
-# since we are dealing with an imbalanced dataset we undersample the majority class (no churn) to balance the dataset.
-set.seed(1)
-majority_indices <- which(data$Churn == 'False')
-minority_count <- sum(data$Churn == 'True')
-sampled_indices <- sample(majority_indices, size = minority_count, replace = FALSE)
-balanced_data <- data[c(sampled_indices, which(data$Churn == 'True')), ]
-
-levels(data$Churn) # original levels --> i needed this step since i was getting some errors due to the factorization
-balanced_data$Churn <- as.factor(balanced_data$Churn)
-levels(balanced_data$Churn)
-
-table(balanced_data$Churn)
-
-balanced_model <- glm(Churn ~ Customer.service.calls, family = binomial, data = balanced_data )
-summary(balanced_model)
-
-# plot for balanced data
-call_range <- seq(min(data$Customer.service.calls, na.rm = TRUE), 
-                  max(data$Customer.service.calls, na.rm = TRUE), 
-                  length.out = 100)
-newdata <- data.frame(Customer.service.calls = call_range)
-newdata$Probability <- predict(balanced_model, newdata = newdata, type = "response")
-newdata$Odds <- newdata$Probability / (1 - newdata$Probability)
-
-ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
-  geom_line() + 
-  labs(title = "Effect of Customer Service Calls on the Probability of Churn (Balanced Data)",
-       x = "Number of Customer Service Calls",
-       y = "Probability of Churn") +
-  scale_y_continuous(labels = scales::percent_format()) +  # Convert y-axis into percentage format
-  theme_minimal() +  # Use a minimal theme
-  theme(
-    plot.title = element_text(hjust = 0.5), 
-    axis.text.x = element_text(angle = 45, hjust = 1), 
-    axis.title.x = element_text(face = "bold"),  
-    axis.title.y = element_text(face = "bold")  
-  )
 
 ## other interactions between different predictors:
-### total day charge and total night charge
-set.seed(1)
-data$Churn <- as.factor(data$Churn)
-model <- glm(Churn ~ Total.day.charge*Total.night.charge, family = binomial, data = data)
-summary(model)
-### The interaction term has a coefficient of 0.01098. This positive coefficient indicates that the combined increase in both day and night charges leads to an increase in the log odds of churn. 
-### The interaction is statistically significant (p-value = 0.0000181).
-### Total.day.charge: p = 0.160490, also not statistically significant, suggesting that the effect of day charges alone might not strongly influence churn.
-### Total.night.charge: p = 0.000242, significant, implying a strong effect of night charges in reducing churn likelihood.
-
 ### international plan and voice mail plan
 set.seed(1)
 data$Churn <- as.factor(data$Churn)
