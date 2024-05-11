@@ -28,7 +28,7 @@ library(purrr)
 library(ROSE)
 
 
-data = read.csv("~/Desktop/Telecom-Churn/TelecomChurn.csv")
+data = read.csv("TelecomChurn.csv")
 
 # 3333 rows and 20 columns
 
@@ -444,7 +444,6 @@ chisq.test(contingency.table)
 # we saw that the churn rate is higher for customers that have higher total day minutes and total day charge
 # we saw that the churn rate is higher for customers that have higher total eve charge, night charge, and intl charge
 # we saw that State also influences the churn rate
-
 
 
 # POINT 4

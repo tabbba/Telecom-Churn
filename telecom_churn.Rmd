@@ -71,6 +71,9 @@ categorical_vars <- data[, sapply(data, is.factor) & !names(data) %in% "Churn"]
 
 ```{r}
 skim(data)
+```
+
+```{r, echo=FALSE, results='hide'}
 anyDuplicated(data)
 ```
 
@@ -111,7 +114,7 @@ continuous %>%
   facet_wrap(vars(metric), scales = "free") +
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
-  scale_color_manual(name = "Churn", labels = c("No", "Yes"), values = c("#dab0ff", "#ADD8E6")) +
+  scale_color_manual(name = "Churn", labels = c("No", "Yes"), values = c("#15aabf", "#ff8787")) +
   labs(title = "Numeric Features", subtitle = "Univariate Distribution by Churn") +
   theme_minimal() +
   theme(
@@ -137,7 +140,7 @@ ggplot(long_data, aes(x = Value, fill = Value)) +
   facet_wrap(~ Category, scales = "free_x", nrow = 2, ncol = 2) +
   labs(title = "Plan Distribution", x = NULL, y = "Count") +
   theme_minimal() +
-  scale_fill_manual(values = c("No" = "#ADD8E6", "Yes" = "#dab0ff"), labels = c("False" = "No", "True" = "Yes")) +
+  scale_fill_manual(values = c("No" = "#15aabf", "Yes" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
   theme(
     strip.text = element_text(size = 12),
     axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
@@ -198,7 +201,7 @@ The p-value is less than 2.2e-16, indicating a statistically significant associa
 
 To conclude, for the the analysis of categorical variables, we also analysed the distribution of the **State** variable; the below plot shows the distribution of customers across different states in the US.
 
-```{r echo=FALSE}
+```{r echo=FALSE, warning=FALSE, results='hide'}
 us_map <- map_data("state") %>% 
   as_tibble()
 
@@ -801,7 +804,7 @@ auc.ridge <- roc(data.val$Churn, as.numeric(ridge.predict),
 As shown in the above plots, the AUC for the Lasso model is 0.778, while the AUC for the Ridge model is 0.776. Both models demonstrate good discrimination ability, with the Lasso model slightly outperforming the Ridge model.
 
 
-```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.align='center'}}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.align='center'}
 grid.arrange(lasso.plot, ridge.plot, top = "Penalized Approaches for Logistic Regression")
 
 lasso_df <- data.frame(Model = "Logistic Lasso",
