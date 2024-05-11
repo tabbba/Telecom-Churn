@@ -264,14 +264,14 @@ The correlation matrix shows that there is a **perfect correlation between the c
 
 ### Lower-dimensional models
 
-Before proceeding with the full model we need to focus on some lower dimensional model in order to investigate some interesting relationships between the variables. We only include customers who have made a service call:
+Before proceeding with the full model we need to focus on some lower dimensional model in order to investigate some interesting relationships between the variables. We decided to proceed by implementing a logistic regression model to understand the relationship between the target variable **"Churn"** and the **Customer Service Calls** variables: indeed, we want to understand if the number of customer service calls influences the churn rate.
 
 ```{r}
 service_calls <- data %>%
   filter(Customer.service.calls > 0)
 ```
 
-This is the proportion of customers who churned after making a service call:
+We start by visualizing the proportion of churn by the number of customer service calls:
 
 ```{r, echo=FALSE, fig.align='center'}
 churn_percent <- service_calls %>%
@@ -283,18 +283,136 @@ ggplot(churn_percent, aes(x = Customer.service.calls, y = Percent, fill = Churn)
   geom_col(width = 0.7, color = 1) +
   labs(title = "Churn by Customer Service Calls", x = "Customer Service Calls", y = "Percent", fill = "Churn") +
   theme_minimal() +
-  scale_fill_manual(values = c("False" = "#ffe8cc", "True" = "#ff8787"), labels = c("False" = "No", "True" = "Yes")) +
+  scale_fill_manual(values = c("False" = "#ADD8E6", "True" = "#dab0ff"), labels = c("False" = "No", "True" = "Yes")) +
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold"),
     legend.position = "bottom"
   )
 ```
 
-We can see that the churn rate increases as the number of customer service calls increases. This suggests that customers who make more service calls are more likely to churn.
+We can see that the churn rate increases as the number of customer service calls increases. Just by looking at the above plot we get the intuition that customers who make more service calls are more likely to churn.
 
-(decidere se gli vogliamo mettere tutti o meno)
+Hence, we proceed by fitting the logistic regression model to understand the relationship between the number of customer service calls and the churn rate:
 
-**N.B.** We computed more analysis, using plots and hypothesis testing, to understand the relationship between the variables and the target variable "Churn", but for limited space restrictions we will not show them here. In the above paragraph ('Conclusions up to now') we will report the main conclusions arising from this analysis.
+```{r}
+set.seed(1)
+data$Churn <- as.factor(data$Churn)
+model <- glm(Churn ~ Customer.service.calls, family = binomial, data = data)
+summary(model)
+```
+
+The output shows a logistic regression analysis where the likelihood of customer churn increases significantly with each additional customer service call, as indicated by the positive coefficient of 0.39617 (p \< 2e-16). The model fits the data reasonably with an AIC of 2631.2, suggesting that customer service calls are a relevant predictor of churn. Moreover, the intercept's p-value (\<2e-16) suggests that there is a statistically significant effect of having zero customer service calls on the likelihood of churn and that there is a statistically significant association between the number of customer service calls and an increased likelihood of churn.
+
+```{r, echo=FALSE, fig.align='center', message=FALSE, warning=FALSE}
+call_range <- seq(min(data$Customer.service.calls, na.rm = TRUE), 
+                  max(data$Customer.service.calls, na.rm = TRUE), 
+                  length.out = 100)
+newdata <- data.frame(Customer.service.calls = call_range)
+newdata$Probability <- predict(model, newdata = newdata, type = "response")
+newdata$Odds <- newdata$Probability / (1 - newdata$Probability)
+
+ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
+  geom_line() + 
+  labs(title = "Effect of Customer Service Calls on the Probability of Churn",
+       x = "Number of Customer Service Calls",
+       y = "Probability of Churn") +
+  scale_y_continuous(labels = scales::percent_format()) +  # Convert y-axis into percentage format
+  theme_minimal() +  # Use a minimal theme
+  geom_hline(yintercept = 0.5, colour = "red", linetype = "dashed")
+theme(
+  plot.title = element_text(hjust = 0.5), 
+  axis.text.x = element_text(angle = 45, hjust = 1), 
+  axis.title.x = element_text(face = "bold"),  
+  axis.title.y = element_text(face = "bold")  
+)
+```
+
+By looking at the above graph, there is a clear positive trend showing that as the number of customer service calls increases, the probability of churn also rises significantly. For instance, the probability of churn exceeds 50% (indicated by the red dashed line) as the number of calls approaches approximately 5.5; indeed the graph highlights a critical area for operational improvement.
+
+However, we are dealing with a dataset that is highly imbalanced, with 85.5% of the customers not churning and 14.5% churning. This imbalance can lead to biased models that predict the majority class more accurately than the minority class. To address this issue, we will use the undersampling technique to balance the dataset; that is we reduce the number of observations in the majority class (Non-Churn) to match the number of observations in the minority class (Churn).
+
+```{r}
+set.seed(1)
+majority_indices <- which(data$Churn == 'False')
+minority_count <- sum(data$Churn == 'True')
+sampled_indices <- sample(majority_indices, size = minority_count, replace = FALSE)
+balanced_data <- data[c(sampled_indices, which(data$Churn == 'True')), ]
+balanced_data$Churn <- as.factor(balanced_data$Churn)
+balanced_model <- glm(Churn ~ Customer.service.calls, family = binomial, data = balanced_data )
+summary(balanced_model)
+```
+
+In this balanced model, the intercept is -0.54195, indicating the log-odds of churn when there are zero customer service calls. Each additional customer service call increases the probability of churn by 0.29344 with a highly significant p-value (1.73e-11), suggesting a strong influence of customer service interactions on churn likelihood. Compared to the initial model, which had a coefficient of 0.39617 for customer service calls, the coefficient in the balanced model is somewhat lower, which might indicate that the initial model overestimated the effect of customer service calls due to the imbalance in the dataset. Furthermore, the AIC (Akaike Information Criterion) has notably decreased from 2631.2 in the original model to 1293.9 in the balanced model, indicating a more parsimonious fit.
+
+```{r, echo=FALSE, fig.align='center'}
+call_range <- seq(min(data$Customer.service.calls, na.rm = TRUE), 
+                  max(data$Customer.service.calls, na.rm = TRUE), 
+                  length.out = 100)
+newdata <- data.frame(Customer.service.calls = call_range)
+newdata$Probability <- predict(balanced_model, newdata = newdata, type = "response")
+newdata$Odds <- newdata$Probability / (1 - newdata$Probability)
+ggplot(newdata, aes(x = Customer.service.calls, y = Probability)) +
+  geom_line() + 
+  labs(title = "Effect of Customer Service Calls on the Probability of Churn (Balanced Data)",
+       x = "Number of Customer Service Calls",
+       y = "Probability of Churn") +
+  scale_y_continuous(labels = scales::percent_format()) +  # Convert y-axis into percentage format
+  theme_minimal() +  # Use a minimal theme
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.title.x = element_text(face = "bold"),  
+    axis.title.y = element_text(face = "bold")  
+  )
+```
+
+The above curve shows a steady increase in the probability of churn as the number of customer service calls rises, beginning from below 50% and reaching towards 90% as the number approaches 7.5 calls; this graph clearly demonstrates how increased customer service interactions are strongly correlated with higher churn rates, emphasizing the need for addressing issues that lead to repeated customer service engagements.
+
+Finally we compare the two confusion matrices of the balanced and unbalanced models:
+
+```{r, echo=FALSE}
+confusion.mat <- function(data, model, target, threshold) {
+  predicted_Y <- ifelse(predict(model, type = "response", newdata = data) > threshold, 'True', 'False')
+  actual_Y <- data[[target]]
+  True.positive <- sum(predicted_Y == 'True' & actual_Y == 'True')
+  True.negative <- sum(predicted_Y == 'False' & actual_Y == 'False')
+  False.positive <- sum(predicted_Y == 'True' & actual_Y == 'False')
+  False.negative <- sum(predicted_Y == 'False' & actual_Y == 'True')
+  Confusion.Matrix <- matrix(c(True.positive, False.negative, 
+                               False.positive, True.negative),
+                             nrow = 2, byrow = TRUE)
+  rownames(Confusion.Matrix) <- c("Actual Positive", "Actual Negative")
+  colnames(Confusion.Matrix) <- c("Predicted Positive", "Predicted Negative")
+  print(Confusion.Matrix)
+}
+
+confusion.mat(data, model, "Churn", 0.5) 
+confusion.mat(balanced_data,balanced_model, "Churn", 0.5) 
+```
+
+In the unbalanced dataset, the model struggles to correctly identify positive cases, predicting only 8 as positive (true positives) and incorrectly labeling 5 negatives as positive (false positives). In contrast, the balanced model demonstrates better performance in identifying positive cases (269 true positives) but at the cost of more false positives (203). Indeed, this comparison underscores the impact of using balanced data on model performance, particularly in improving the detection of positive cases, which is critical in scenarios like customer churn prediction.
+
+We further proceeded in exploring the interactions between other variables such as the **International.plan** and **Voice.mail.plan** with the target variable **Churn**.
+
+```{r}
+set.seed(1)
+data$Churn <- as.factor(data$Churn)
+model <- glm(Churn ~ International.plan*Voice.mail.plan, family = binomial, data = data)
+summary(model)
+```
+
+The intercept is very significant with a p-value \< 2e-16, indicating a strong effect when both plans are absent. Moreover, both International.planYes and Voice.mail.planYes are highly significant. For the interaction term, while international plans are associated with higher churn, voice mail plans seem to mitigate churn risk. However, customers who have both plans are particularly at risk of churning, possibly due to the higher costs or complexities associated with managing multiple service features.
+
+The last association we investigated was the relationship between the **Customer.service.calls** and **International.plan** variables with the target variable **Churn**.
+
+```{r}
+set.seed(1)
+data$Churn <- as.factor(data$Churn)
+model <- glm(Churn ~ Customer.service.calls*International.plan, family = binomial, data = data)
+summary(model)
+```
+
+Both International.planYes and Customer.service.calls are highly significant. The interaction term shows that customers with more customer service interactions generally have higher churn rates. However, the negative interaction indicates that the churn-increasing effect of service calls might be mitigated among customers with an international plan, possibly due to different expectations or experiences.
 
 **CONCLUSION UP TO NOW:**
 
